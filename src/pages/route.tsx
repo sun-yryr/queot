@@ -3,6 +3,7 @@ import { Hello } from "./hello.jsx";
 import { Index } from "./index.jsx";
 import { Effect, type Context } from "effect";
 import { executeQuery, Queryable } from "../services/query.js";
+import { createDiffSheet } from "../services/diff.js";
 
 export function createPageRoute(deps: {
   queryable: Context.Tag.Service<typeof Queryable>;
@@ -54,6 +55,9 @@ export function createPageRoute(deps: {
     }).pipe(Effect.provideService(Queryable, deps.queryable));
 
     const { a, b } = await Effect.runPromise(program);
+    const diff =
+      a.result && b.result ? createDiffSheet(a.result, b.result) : undefined;
+
     return c.html(
       <Index
         queryA={queryA}
@@ -62,6 +66,7 @@ export function createPageRoute(deps: {
         resultB={b.result}
         errorA={a.error}
         errorB={b.error}
+        diff={diff}
       />,
     );
   });

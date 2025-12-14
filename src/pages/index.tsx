@@ -1,5 +1,8 @@
 import type { FC } from "hono/jsx";
 import type { QueryResult } from "../services/query.js";
+import type { DiffSheet } from "../services/diff.js";
+import { DiffView } from "./components/DiffView.jsx";
+import { QueryResultTable } from "./components/QueryResultTable.jsx";
 
 type Props = {
   queryA?: string;
@@ -8,34 +11,8 @@ type Props = {
   resultB?: QueryResult;
   errorA?: string;
   errorB?: string;
+  diff?: DiffSheet;
 };
-
-function cellText(v: unknown): string {
-  if (v === null) return "null";
-  if (v === undefined) return "";
-  switch (typeof v) {
-    case "string":
-      return v;
-    case "number":
-    case "bigint":
-    case "boolean":
-      return String(v);
-    case "symbol":
-      return v.toString();
-    case "function":
-      return "[function]";
-    case "object": {
-      try {
-        return JSON.stringify(v);
-      } catch {
-        // Objectの暗黙文字列化を避けて、型情報だけ返す
-        return Object.prototype.toString.call(v);
-      }
-    }
-    default:
-      return "";
-  }
-}
 
 export const Index: FC<Props> = ({
   queryA,
@@ -44,6 +21,7 @@ export const Index: FC<Props> = ({
   resultB,
   errorA,
   errorB,
+  diff,
 }) => {
   const defaultQuery = `select
   1 as one,
@@ -54,9 +32,6 @@ export const Index: FC<Props> = ({
 
   const hasAnyResult = Boolean(resultA || resultB);
   const hasAnyError = Boolean(errorA || errorB);
-  const isEditorOpen = hasAnyError || !hasAnyResult;
-
-  const showATabByDefault = Boolean(resultA || errorA) || !(resultB || errorB);
 
   return (
     <div class="container">
@@ -71,49 +46,52 @@ export const Index: FC<Props> = ({
 
       <main class="main">
         <section class="panel">
-          <details class="details" open={isEditorOpen}>
-            <summary class="summary">
-              <span class="summaryTitle">SQL</span>
+          <details class="disclosure sqlEditor" open={true}>
+            <summary class="disclosureSummary">
+              <span class="disclosureTitle">SQL</span>
+              <span class="disclosureHint">（クリックで開閉）</span>
             </summary>
-            <form method="post" action="/">
-              <div class="sqlGrid">
-                <div class="sqlCol">
-                  <div class="sqlLabelRow">
-                    <span class="sqlLabel">Query A</span>
+            <div class="disclosureBody">
+              <form method="post" action="/">
+                <div class="sqlGrid">
+                  <div class="sqlCol">
+                    <div class="sqlLabelRow">
+                      <span class="sqlLabel">Query A</span>
+                    </div>
+                    <textarea
+                      id="sqlA"
+                      name="queryA"
+                      class="textarea"
+                      spellcheck={false}
+                      rows={10}
+                    >
+                      {currentQueryA}
+                    </textarea>
                   </div>
-                  <textarea
-                    id="sqlA"
-                    name="queryA"
-                    class="textarea"
-                    spellcheck={false}
-                    rows={10}
-                  >
-                    {currentQueryA}
-                  </textarea>
+
+                  <div class="sqlCol">
+                    <div class="sqlLabelRow">
+                      <span class="sqlLabel">Query B</span>
+                    </div>
+                    <textarea
+                      id="sqlB"
+                      name="queryB"
+                      class="textarea"
+                      spellcheck={false}
+                      rows={10}
+                    >
+                      {currentQueryB}
+                    </textarea>
+                  </div>
                 </div>
 
-                <div class="sqlCol">
-                  <div class="sqlLabelRow">
-                    <span class="sqlLabel">Query B</span>
-                  </div>
-                  <textarea
-                    id="sqlB"
-                    name="queryB"
-                    class="textarea"
-                    spellcheck={false}
-                    rows={10}
-                  >
-                    {currentQueryB}
-                  </textarea>
+                <div class="actions">
+                  <button type="submit" class="button">
+                    Run
+                  </button>
                 </div>
-              </div>
-
-              <div class="actions">
-                <button type="submit" class="button">
-                  Run
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </details>
         </section>
 
@@ -128,18 +106,16 @@ export const Index: FC<Props> = ({
                 class="tabInput"
                 type="radio"
                 name="resultTab"
-                id="tabA"
-                checked={showATabByDefault}
+                id="tabDiff"
+                checked
               />
-              <input
-                class="tabInput"
-                type="radio"
-                name="resultTab"
-                id="tabB"
-                checked={!showATabByDefault}
-              />
+              <input class="tabInput" type="radio" name="resultTab" id="tabA" />
+              <input class="tabInput" type="radio" name="resultTab" id="tabB" />
 
               <div class="tabs">
+                <label class="tab" for="tabDiff">
+                  Diff
+                </label>
                 <label class="tab" for="tabA">
                   Query A
                 </label>
@@ -149,68 +125,27 @@ export const Index: FC<Props> = ({
               </div>
 
               <div class="panels">
+                <section id="panelDiff" class="panelBody">
+                  <DiffView
+                    diff={diff}
+                    hasBothResults={Boolean(resultA && resultB)}
+                  />
+                </section>
+
                 <section id="panelA" class="panelBody">
-                  {errorA ? <div class="error">{errorA}</div> : null}
-                  {resultA ? (
-                    <div class="result">
-                      <table>
-                        <thead>
-                          <tr>
-                            {resultA.fields.map((f) => (
-                              <th>{f.name}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {resultA.rows.map((r) => {
-                            const row = r as Record<string, unknown>;
-                            return (
-                              <tr>
-                                {resultA.fields.map((f) => (
-                                  <td>{cellText(row[f.name])}</td>
-                                ))}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                      <div class="meta">{resultA.rows.length} row(s)</div>
-                    </div>
-                  ) : (
-                    <div class="meta">Query Aは未実行/空です。</div>
-                  )}
+                  <QueryResultTable
+                    result={resultA}
+                    error={errorA}
+                    emptyMessage="Query Aは未実行/空です。"
+                  />
                 </section>
 
                 <section id="panelB" class="panelBody">
-                  {errorB ? <div class="error">{errorB}</div> : null}
-                  {resultB ? (
-                    <div class="result">
-                      <table>
-                        <thead>
-                          <tr>
-                            {resultB.fields.map((f) => (
-                              <th>{f.name}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {resultB.rows.map((r) => {
-                            const row = r as Record<string, unknown>;
-                            return (
-                              <tr>
-                                {resultB.fields.map((f) => (
-                                  <td>{cellText(row[f.name])}</td>
-                                ))}
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                      <div class="meta">{resultB.rows.length} row(s)</div>
-                    </div>
-                  ) : (
-                    <div class="meta">Query Bは未実行/空です。</div>
-                  )}
+                  <QueryResultTable
+                    result={resultB}
+                    error={errorB}
+                    emptyMessage="Query Bは未実行/空です。"
+                  />
                 </section>
               </div>
             </div>
@@ -235,11 +170,14 @@ export const Index: FC<Props> = ({
         .label { font-size: 13px; font-weight: 600; opacity: 0.9; }
         .hint { font-size: 12px; opacity: 0.7; }
         .h2 { margin: 0; font-size: 13px; font-weight: 700; opacity: 0.9; }
-        .details { display: block; }
-        .summary { cursor: pointer; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; list-style: none; }
-        .summary::-webkit-details-marker { display: none; }
-        .summaryTitle { font-size: 13px; font-weight: 700; opacity: 0.95; }
-        .summaryHint { font-size: 12px; opacity: 0.7; }
+
+        /* 汎用: details/summary を “開閉できるセクション” として表現する */
+        .disclosure { display: block; }
+        .disclosureSummary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+        .disclosureSummary::-webkit-details-marker { display: none; }
+        .disclosureTitle { font-size: 13px; font-weight: 700; opacity: 0.95; }
+        .disclosureHint { font-size: 12px; opacity: 0.7; }
+        .disclosureBody { margin-top: 8px; }
         .sqlGrid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 8px; }
         @media (min-width: 980px) { .sqlGrid { grid-template-columns: 1fr 1fr; } }
         .sqlCol { display: flex; flex-direction: column; }
@@ -259,13 +197,65 @@ export const Index: FC<Props> = ({
         .tabsRoot { margin-top: 10px; }
         .tabInput { position: absolute; opacity: 0; pointer-events: none; }
         .tabs { display: inline-flex; gap: 6px; padding: 4px; border: 1px solid rgba(127,127,127,0.35); border-radius: 12px; background: rgba(0,0,0,0.04); }
-        .tab { cursor: pointer; padding: 6px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; opacity: 0.8; user-select: none; }
-        #tabA:checked ~ .tabs label[for="tabA"],
-        #tabB:checked ~ .tabs label[for="tabB"] { background: rgba(127,127,127,0.18); opacity: 1; }
+        .tab {
+          position: relative;
+          cursor: pointer;
+          padding: 7px 12px;
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: 700;
+          user-select: none;
+          opacity: 0.9;
+          border: 1px solid transparent;
+        }
+        .tab:hover { background: rgba(127,127,127,0.10); }
+        .tab:focus-visible { outline: 2px solid rgba(99,102,241,0.65); outline-offset: 2px; }
+
+        /* NOTE: Hono JSX の <style> は内容がエスケープされるため、属性セレクタのクォートは使わない */
+        #tabDiff:checked ~ .tabs label[for=tabDiff],
+        #tabA:checked ~ .tabs label[for=tabA],
+        #tabB:checked ~ .tabs label[for=tabB] {
+          background: rgba(99,102,241,0.22);
+          border-color: rgba(99,102,241,0.45);
+          opacity: 1;
+        }
         .panels { margin-top: 10px; }
         .panelBody { display: none; }
+        #tabDiff:checked ~ .panels #panelDiff { display: block; }
         #tabA:checked ~ .panels #panelA { display: block; }
         #tabB:checked ~ .panels #panelB { display: block; }
+
+        .diffTable th, .diffTable td { white-space: pre-wrap; }
+        .diffTable thead th { position: sticky; z-index: 2; }
+        .diffHeadMetaRow th { background: rgba(127,127,127,0.10); font-weight: 600; opacity: 0.9; }
+        .diffHeadHeaderRow th { background: rgba(30,30,30,0.10); font-weight: 800; }
+        /* 列変更色は、行変更色より優先させる（特に row追加×col削除 のケースを崩さない） */
+        .diffColAdded { background: rgba(34, 197, 94, 0.18) !important; }
+        .diffColRemoved { background: rgba(239, 68, 68, 0.18) !important; }
+        .diffColChanged { background: rgba(234, 179, 8, 0.14) !important; }
+        .diffMarker { width: 52px; text-align: center; font-weight: 700; opacity: 0.85; }
+        .diffRowAdded td { background: rgba(34, 197, 94, 0.12); }
+        .diffRowRemoved td { background: rgba(239, 68, 68, 0.12); }
+        .diffRowChanged td { background: rgba(234, 179, 8, 0.10); }
+        .diffRowOmitted td { text-align: center; opacity: 0.65; font-style: italic; }
+        .diffCell { display: inline-flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+        .diffCellOld { opacity: 0.75; text-decoration: line-through; }
+        .diffCellArrow { opacity: 0.65; }
+        .diffCellNew { font-weight: 700; }
+
+        .diffLegend { margin-bottom: 10px; border-radius: 10px; border: 1px solid rgba(127,127,127,0.25); background: rgba(127,127,127,0.06); overflow: hidden; }
+        .diffLegend .disclosureSummary { padding: 10px 12px; }
+        .diffLegend .disclosureTitle { font-size: 12px; font-weight: 800; opacity: 0.9; }
+        .diffLegend .disclosureHint { font-size: 11px; opacity: 0.65; }
+        .diffLegendBody { padding: 0 12px 10px; border-top: 1px solid rgba(127,127,127,0.18); }
+        .diffLegendGrid { margin-top: 10px; display: grid; gap: 6px; grid-template-columns: 1fr; }
+        @media (min-width: 980px) { .diffLegendGrid { grid-template-columns: 1fr 1fr; } }
+        .diffLegendItem { display: flex; gap: 8px; align-items: flex-start; }
+        .diffLegendSwatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(127,127,127,0.25); margin-top: 2px; flex: 0 0 auto; }
+        .diffLegendSwatchMeta { display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 11px; background: rgba(127,127,127,0.10); color: rgba(0,0,0,0.65); }
+        .diffLegendText { font-size: 12px; opacity: 0.85; }
+        .diffLegendText code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 11px; }
+        .diffLegendNote { margin-left: 6px; opacity: 0.8; }
       `}</style>
     </div>
   );
