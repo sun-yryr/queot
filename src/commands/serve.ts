@@ -1,4 +1,6 @@
 import {Args, Command, Flags} from '@oclif/core'
+import { createApp } from '../server.js'
+import { serve } from '@hono/node-server'
 
 export default class Serve extends Command {
   static override args = {
@@ -9,10 +11,7 @@ export default class Serve extends Command {
     '<%= config.bin %> <%= command.id %>',
   ]
   static override flags = {
-    // flag with no value (-f, --force)
-    force: Flags.boolean({char: 'f'}),
-    // flag with a value (-n, --name=VALUE)
-    name: Flags.string({char: 'n', description: 'name to print'}),
+    port: Flags.integer({char: 'p', description: 'port to listen on', default: 3000}),
   }
 
   public async run(): Promise<void> {
@@ -20,8 +19,20 @@ export default class Serve extends Command {
 
     const name = flags.name ?? 'world'
     this.log(`hello ${name} from /Users/sun-yryr/.ghr/github.com/sun-yryr/difql/src/commands/serve.ts`)
-    if (args.file && flags.force) {
-      this.log(`you input --force and --file: ${args.file}`)
-    }
+    const app = createApp();
+
+    const server = serve({
+      fetch: app.fetch,
+      port: flags.port,
+    })
+
+    process.on('SIGINT', () => {
+      server.close();
+    });
+    process.on('SIGTERM', () => {
+      server.close();
+    });
+
+    this.log(`Server is running on port ${flags.port}\nPress Ctrl+C to exit`);
   }
 }
