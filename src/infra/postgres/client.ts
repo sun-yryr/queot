@@ -9,5 +9,6 @@ export function createPgClientFromEnv(): Client {
     port: Number(process.env.PGPORT ?? "5432"),
     user: process.env.PGUSER ?? "postgres",
     password: process.env.PGPASSWORD ?? "example",
+    database: process.env.PGDATABASE ?? "postgres",
   });
 }
