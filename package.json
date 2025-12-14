@@ -3,11 +3,32 @@
   "version": "0.0.0",
   "description": "Query Optimization Tool for SQL",
   "main": "index.js",
+  "type": "module",
   "scripts": {
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "UNLICENSED",
-  "packageManager": "pnpm@10.25.0"
+  "packageManager": "pnpm@10.25.0",
+  "dependencies": {
+    "@oclif/core": "^4.8.0"
+  },
+  "devDependencies": {
+    "@tsconfig/node24": "^24.0.3",
+    "@types/node": "^24.10.3",
+    "oclif": "^4.22.55",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  },
+  "bin": {
+    "queot": "./bin/run.js"
+  },
+  "oclif": {
+    "bin": "queot",
+    "commands": "./dist/commands",
+    "dirname": "queot",
+    "topicSeparator": " "
+  }
 }
