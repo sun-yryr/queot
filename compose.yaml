@@ -1,0 +1,14 @@
+services:
+  pg:
+    image: postgres:18.1
+    environment:
+      POSTGRES_PASSWORD: example
+    ports:
+      - "5432:5432"
+    volumes:
+      - type: volume
+        source: pg-data
+        target: /var/lib/postgresql/18/docker
+
+volumes:
+  pg-data:
