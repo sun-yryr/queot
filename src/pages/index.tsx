@@ -4,6 +4,8 @@ import type { DiffSheet } from "../services/diff.js";
 import { DiffView } from "./components/DiffView.jsx";
 import { QueryResultTable } from "./components/QueryResultTable.jsx";
 
+type PlanMode = "explain" | "analyze";
+
 type Props = {
   queryA?: string;
   queryB?: string;
@@ -12,6 +14,12 @@ type Props = {
   errorA?: string;
   errorB?: string;
   diff?: DiffSheet;
+  planMode?: PlanMode;
+  planResultA?: QueryResult;
+  planResultB?: QueryResult;
+  planErrorA?: string;
+  planErrorB?: string;
+  planDiff?: DiffSheet;
 };
 
 export const Index: FC<Props> = ({
@@ -22,6 +30,12 @@ export const Index: FC<Props> = ({
   errorA,
   errorB,
   diff,
+  planMode,
+  planResultA,
+  planResultB,
+  planErrorA,
+  planErrorB,
+  planDiff,
 }) => {
   const defaultQuery = `select
   1 as one,
@@ -29,9 +43,12 @@ export const Index: FC<Props> = ({
   const currentQueryA =
     (queryA ?? "").trim().length > 0 ? queryA! : defaultQuery;
   const currentQueryB = (queryB ?? "").trim().length > 0 ? queryB! : "";
+  const currentPlanMode: PlanMode = planMode ?? "explain";
 
-  const hasAnyResult = Boolean(resultA || resultB);
-  const hasAnyError = Boolean(errorA || errorB);
+  const hasAnyResult = Boolean(
+    resultA || resultB || planResultA || planResultB,
+  );
+  const hasAnyError = Boolean(errorA || errorB || planErrorA || planErrorB);
 
   return (
     <div class="container">
@@ -85,6 +102,35 @@ export const Index: FC<Props> = ({
                   </div>
                 </div>
 
+                <div class="sqlOptions">
+                  <div class="sqlLabelRow">
+                    <span class="sqlLabel">実行計画</span>
+                    <span class="hint">
+                      EXPLAIN / EXPLAIN ANALYZE を自動付与
+                    </span>
+                  </div>
+                  <div class="planModeRow">
+                    <label class="planModeOption">
+                      <input
+                        type="radio"
+                        name="planMode"
+                        value="explain"
+                        checked={currentPlanMode === "explain"}
+                      />
+                      EXPLAIN
+                    </label>
+                    <label class="planModeOption">
+                      <input
+                        type="radio"
+                        name="planMode"
+                        value="analyze"
+                        checked={currentPlanMode === "analyze"}
+                      />
+                      EXPLAIN ANALYZE
+                    </label>
+                  </div>
+                </div>
+
                 <div class="actions">
                   <button type="submit" class="button">
                     Run
@@ -101,54 +147,112 @@ export const Index: FC<Props> = ({
           </div>
 
           {hasAnyResult || hasAnyError ? (
-            <div class="tabsRoot">
-              <input
-                class="tabInput"
-                type="radio"
-                name="resultTab"
-                id="tabDiff"
-                checked
-              />
-              <input class="tabInput" type="radio" name="resultTab" id="tabA" />
-              <input class="tabInput" type="radio" name="resultTab" id="tabB" />
+            <>
+              <div class="tabsRoot">
+                <input
+                  class="tabInput"
+                  type="radio"
+                  name="resultTab"
+                  id="tabDiff"
+                  checked
+                />
+                <input
+                  class="tabInput"
+                  type="radio"
+                  name="resultTab"
+                  id="tabA"
+                />
+                <input
+                  class="tabInput"
+                  type="radio"
+                  name="resultTab"
+                  id="tabB"
+                />
 
-              <div class="tabs">
-                <label class="tab" for="tabDiff">
-                  Diff
-                </label>
-                <label class="tab" for="tabA">
-                  Query A
-                </label>
-                <label class="tab" for="tabB">
-                  Query B
-                </label>
+                <div class="tabs">
+                  <label class="tab" for="tabDiff">
+                    Diff
+                  </label>
+                  <label class="tab" for="tabA">
+                    Query A
+                  </label>
+                  <label class="tab" for="tabB">
+                    Query B
+                  </label>
+                </div>
+
+                <div class="panels">
+                  <section id="panelDiff" class="panelBody">
+                    <DiffView
+                      diff={diff}
+                      hasBothResults={Boolean(resultA && resultB)}
+                    />
+                  </section>
+
+                  <section id="panelA" class="panelBody">
+                    <QueryResultTable
+                      result={resultA}
+                      error={errorA}
+                      emptyMessage="Query Aは未実行/空です。"
+                    />
+                  </section>
+
+                  <section id="panelB" class="panelBody">
+                    <QueryResultTable
+                      result={resultB}
+                      error={errorB}
+                      emptyMessage="Query Bは未実行/空です。"
+                    />
+                  </section>
+                </div>
               </div>
 
-              <div class="panels">
-                <section id="panelDiff" class="panelBody">
+              <section class="planSection">
+                <div class="row planHeader">
+                  <div>
+                    <h3 class="h3">Execution Plan</h3>
+                    <div class="hint">
+                      {currentPlanMode === "analyze"
+                        ? "EXPLAIN ANALYZE を付与して実行計画を取得しています。"
+                        : "EXPLAIN を付与して実行計画を取得しています。"}
+                    </div>
+                  </div>
+                  <div class="planModeBadge">
+                    {currentPlanMode === "analyze"
+                      ? "EXPLAIN ANALYZE"
+                      : "EXPLAIN"}
+                  </div>
+                </div>
+
+                <div class="planGrid">
+                  <div class="planCol">
+                    <div class="planColHeader">Query A</div>
+                    <QueryResultTable
+                      result={planResultA}
+                      error={planErrorA}
+                      emptyMessage="Query Aの実行計画は未実行/空です。"
+                    />
+                  </div>
+                  <div class="planCol">
+                    <div class="planColHeader">Query B</div>
+                    <QueryResultTable
+                      result={planResultB}
+                      error={planErrorB}
+                      emptyMessage="Query Bの実行計画は未実行/空です。"
+                    />
+                  </div>
+                </div>
+
+                <div class="planDiff">
+                  <div class="planColHeader">Plan Diff</div>
                   <DiffView
-                    diff={diff}
-                    hasBothResults={Boolean(resultA && resultB)}
+                    diff={planDiff}
+                    hasBothResults={Boolean(planResultA && planResultB)}
+                    emptyMessage="Diffには Query A と Query B 両方の実行計画が必要です。"
                   />
-                </section>
-
-                <section id="panelA" class="panelBody">
-                  <QueryResultTable
-                    result={resultA}
-                    error={errorA}
-                    emptyMessage="Query Aは未実行/空です。"
-                  />
-                </section>
-
-                <section id="panelB" class="panelBody">
-                  <QueryResultTable
-                    result={resultB}
-                    error={errorB}
-                    emptyMessage="Query Bは未実行/空です。"
-                  />
-                </section>
-              </div>
-            </div>
+                </div>
+              </section>
+            </>
           ) : (
             <div class="meta">
               まだ結果はありません。上のフォームから実行してください。
@@ -170,6 +274,7 @@ export const Index: FC<Props> = ({
         .label { font-size: 13px; font-weight: 600; opacity: 0.9; }
         .hint { font-size: 12px; opacity: 0.7; }
         .h2 { margin: 0; font-size: 13px; font-weight: 700; opacity: 0.9; }
+        .h3 { margin: 0; font-size: 13px; font-weight: 700; opacity: 0.9; }
 
         /* 汎用: details/summary を “開閉できるセクション” として表現する */
         .disclosure { display: block; }
@@ -183,6 +288,10 @@ export const Index: FC<Props> = ({
         .sqlCol { display: flex; flex-direction: column; }
         .sqlLabelRow { display: flex; justify-content: space-between; align-items: baseline; }
         .sqlLabel { font-size: 12px; opacity: 0.8; font-weight: 600; }
+        .sqlOptions { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+        .planModeRow { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .planModeOption { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; opacity: 0.85; }
+        .planModeOption input { accent-color: rgba(99,102,241,0.7); }
         .textarea { width: 100%; margin-top: 8px; padding: 10px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12.5px; line-height: 1.35; border-radius: 10px; border: 1px solid rgba(127,127,127,0.35); background: rgba(0,0,0,0.05); }
         .actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
         .button { border-radius: 10px; border: 1px solid rgba(127,127,127,0.35); padding: 8px 12px; cursor: pointer; font-weight: 600; }
@@ -224,6 +333,15 @@ export const Index: FC<Props> = ({
         #tabDiff:checked ~ .panels #panelDiff { display: block; }
         #tabA:checked ~ .panels #panelA { display: block; }
         #tabB:checked ~ .panels #panelB { display: block; }
+
+        .planSection { margin-top: 18px; border-top: 1px solid rgba(127,127,127,0.25); padding-top: 14px; }
+        .planHeader { align-items: center; }
+        .planModeBadge { border-radius: 999px; border: 1px solid rgba(99,102,241,0.45); background: rgba(99,102,241,0.18); padding: 6px 12px; font-size: 12px; font-weight: 800; }
+        .planGrid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 10px; }
+        @media (min-width: 980px) { .planGrid { grid-template-columns: 1fr 1fr; } }
+        .planCol { display: flex; flex-direction: column; gap: 6px; }
+        .planColHeader { font-size: 12px; font-weight: 700; opacity: 0.85; }
+        .planDiff { margin-top: 12px; }
 
         .diffTable th, .diffTable td { white-space: pre-wrap; }
         .diffTable thead th { position: sticky; z-index: 2; }

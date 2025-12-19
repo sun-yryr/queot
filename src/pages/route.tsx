@@ -14,13 +14,20 @@ export function createPageRoute(deps: {
     const body = await c.req.parseBody();
     const queryA = typeof body?.queryA === "string" ? body.queryA : "";
     const queryB = typeof body?.queryB === "string" ? body.queryB : "";
+    const planMode = body?.planMode === "analyze" ? "analyze" : "explain";
 
     const runOne = (query: string) => {
       const trimmed = query.trim();
       if (trimmed.length === 0)
-        return Effect.succeed({ result: undefined, error: undefined });
+        return Effect.succeed({
+          result: undefined,
+          error: undefined,
+          planResult: undefined,
+          planError: undefined,
+        });
 
-      return executeQuery(trimmed).pipe(
+      const planPrefix = planMode === "analyze" ? "EXPLAIN ANALYZE" : "EXPLAIN";
+      const runPlan = executeQuery(`${planPrefix} ${trimmed}`).pipe(
         Effect.map((result) => ({
           result,
           error: undefined as string | undefined,
@@ -30,6 +37,29 @@ export function createPageRoute(deps: {
             result: undefined,
             error: e instanceof Error ? e.message : String(e),
           }),
+        ),
+      );
+
+      return executeQuery(trimmed).pipe(
+        Effect.flatMap((queryResult) =>
+          runPlan.pipe(
+            Effect.map((plan) => ({
+              result: queryResult,
+              error: undefined as string | undefined,
+              planResult: plan.result,
+              planError: plan.error,
+            })),
+          ),
+        ),
+        Effect.catchAll((e) =>
+          runPlan.pipe(
+            Effect.map((plan) => ({
+              result: undefined,
+              error: e instanceof Error ? e.message : String(e),
+              planResult: plan.result,
+              planError: plan.error,
+            })),
+          ),
         ),
       );
     };
@@ -57,6 +87,10 @@ export function createPageRoute(deps: {
     const { a, b } = await Effect.runPromise(program);
     const diff =
       a.result && b.result ? createDiffSheet(a.result, b.result) : undefined;
+    const planDiff =
+      a.planResult && b.planResult
+        ? createDiffSheet(a.planResult, b.planResult)
+        : undefined;
 
     return c.html(
       <Index
@@ -66,6 +100,12 @@ export function createPageRoute(deps: {
         resultB={b.result}
         errorA={a.error}
         errorB={b.error}
+        planMode={planMode}
+        planResultA={a.planResult}
+        planResultB={b.planResult}
+        planErrorA={a.planError}
+        planErrorB={b.planError}
+        planDiff={planDiff}
         diff={diff}
       />,
     );

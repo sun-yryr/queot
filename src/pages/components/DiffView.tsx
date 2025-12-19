@@ -59,12 +59,15 @@ function classifyMetaCell(text: string): string {
 type Props = {
   diff?: DiffSheet;
   hasBothResults: boolean;
+  emptyMessage?: string;
 };
 
-export const DiffView: FC<Props> = ({ diff, hasBothResults }) => {
+export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
   if (!hasBothResults) {
     return (
-      <div class="meta">Diffには Query A と Query B 両方の結果が必要です。</div>
+      <div class="meta">
+        {emptyMessage ?? "Diffには Query A と Query B 両方の結果が必要です。"}
+      </div>
     );
   }
 
