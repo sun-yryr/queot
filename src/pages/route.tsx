@@ -38,9 +38,12 @@ export function createPageRoute(deps: {
     const body = await c.req.parseBody();
     const queryA = typeof body?.queryA === "string" ? body.queryA : "";
     const queryB = typeof body?.queryB === "string" ? body.queryB : "";
-    const planMode = body?.planMode === "analyze" ? "analyze" : "explain";
+    let planPrefix = "EXPLAIN (FORMAT JSON";
+    if (body?.planMode === "analyze") {
+      planPrefix += ", ANALYZE true";
+    }
+    planPrefix += ")";
 
-      const planPrefix = planMode === "analyze" ? "EXPLAIN ANALYZE" : "EXPLAIN";
     // 1つのトランザクションで2つのクエリを実行する。
     const program = Effect.gen(function* () {
       const connection = yield* Queryable;
