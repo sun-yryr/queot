@@ -1,8 +1,9 @@
-import { Args, Command, Flags } from "@oclif/core";
+import { Args, Command, Flags, settings } from "@oclif/core";
 import { createApp } from "../server.js";
 import { serve } from "@hono/node-server";
 import { createPgClientFromEnv } from "../infra/postgres/client.js";
 import { makePgQueryable } from "../infra/postgres/queryable.js";
+import open from "open";
 
 export default class Serve extends Command {
   static override args = {
@@ -42,5 +43,9 @@ export default class Serve extends Command {
     });
 
     this.log(`Server is running on port ${flags.port}\nPress Ctrl+C to exit`);
+
+    if (!settings.debug) {
+      await open(`http://localhost:${flags.port}`);
+    }
   }
 }

@@ -3,6 +3,8 @@ import type { QueryResult } from "../services/query.js";
 import type { DiffSheet } from "../services/diff.js";
 import { DiffView } from "./components/DiffView.jsx";
 import { QueryResultTable } from "./components/QueryResultTable.jsx";
+import { PlanResult } from "./components/PlanResult.jsx";
+import type { ExplainParseResult } from "@sun-yryr/queot-planparser";
 
 type PlanMode = "explain" | "analyze";
 
@@ -15,8 +17,8 @@ type Props = {
   errorB?: string;
   diff?: DiffSheet;
   planMode?: PlanMode;
-  planResultA?: QueryResult;
-  planResultB?: QueryResult;
+  planResultA?: ExplainParseResult;
+  planResultB?: ExplainParseResult;
   planErrorA?: string;
   planErrorB?: string;
   planDiff?: DiffSheet;
@@ -35,7 +37,6 @@ export const Index: FC<Props> = ({
   planResultB,
   planErrorA,
   planErrorB,
-  planDiff,
 }) => {
   const defaultQuery = `select
   1 as one,
@@ -224,32 +225,48 @@ export const Index: FC<Props> = ({
                   </div>
                 </div>
 
-                <div class="planGrid">
-                  <div class="planCol">
-                    <div class="planColHeader">Query A</div>
-                    <QueryResultTable
-                      result={planResultA}
-                      error={planErrorA}
-                      emptyMessage="Query Aの実行計画は未実行/空です。"
-                    />
-                  </div>
-                  <div class="planCol">
-                    <div class="planColHeader">Query B</div>
-                    <QueryResultTable
-                      result={planResultB}
-                      error={planErrorB}
-                      emptyMessage="Query Bの実行計画は未実行/空です。"
-                    />
-                  </div>
-                </div>
-
-                <div class="planDiff">
-                  <div class="planColHeader">Plan Diff</div>
-                  <DiffView
-                    diff={planDiff}
-                    hasBothResults={Boolean(planResultA && planResultB)}
-                    emptyMessage="Diffには Query A と Query B 両方の実行計画が必要です。"
+                <div class="tabsRoot">
+                  <input
+                    class="tabInput"
+                    type="radio"
+                    name="planTab"
+                    id="planTabA"
+                    checked
                   />
+                  <input
+                    class="tabInput"
+                    type="radio"
+                    name="planTab"
+                    id="planTabB"
+                  />
+
+                  <div class="tabs">
+                    <label class="tab" for="planTabA">
+                      Plan A
+                    </label>
+                    <label class="tab" for="planTabB">
+                      Plan B
+                    </label>
+                  </div>
+
+                  <div class="panels">
+                    <section id="planPanelA" class="panelBody">
+                      <PlanResult
+                        result={planResultA}
+                        error={
+                          planErrorA ?? "Query Aの実行計画は未実行/空です。"
+                        }
+                      />
+                    </section>
+                    <section id="planPanelB" class="panelBody">
+                      <PlanResult
+                        result={planResultB}
+                        error={
+                          planErrorB ?? "Query Bの実行計画は未実行/空です。"
+                        }
+                      />
+                    </section>
+                  </div>
                 </div>
               </section>
             </>
@@ -333,6 +350,15 @@ export const Index: FC<Props> = ({
         #tabDiff:checked ~ .panels #panelDiff { display: block; }
         #tabA:checked ~ .panels #panelA { display: block; }
         #tabB:checked ~ .panels #panelB { display: block; }
+
+        #planTabA:checked ~ .tabs label[for=planTabA],
+        #planTabB:checked ~ .tabs label[for=planTabB] {
+          background: rgba(99,102,241,0.22);
+          border-color: rgba(99,102,241,0.45);
+          opacity: 1;
+        }
+        #planTabA:checked ~ .panels #planPanelA { display: block; }
+        #planTabB:checked ~ .panels #planPanelB { display: block; }
 
         .planSection { margin-top: 18px; border-top: 1px solid rgba(127,127,127,0.25); padding-top: 14px; }
         .planHeader { align-items: center; }

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S tsx --disable-warning=ExperimentalWarning
+#!/usr/bin/env -S tsx watch --disable-warning=ExperimentalWarning
 
 import {execute} from '@oclif/core'
 

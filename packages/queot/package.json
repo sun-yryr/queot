@@ -5,6 +5,7 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
+    "dev": "./bin/dev.js",
     "build": "tsc",
     "check": "pnpm \"/^check:.*/\"",
     "check:prettier": "prettier . --check",
@@ -20,9 +21,11 @@
   "dependencies": {
     "@hono/node-server": "^1.19.7",
     "@oclif/core": "^4.8.0",
+    "@sun-yryr/queot-planparser": "workspace:*",
     "daff": "^1.4.2",
     "effect": "^3.19.12",
     "hono": "^4.10.8",
+    "open": "^11.0.0",
     "pg": "^8.16.3"
   },
   "devDependencies": {

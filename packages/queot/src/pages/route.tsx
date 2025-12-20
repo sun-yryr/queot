@@ -4,6 +4,8 @@ import { Index } from "./index.jsx";
 import { Effect, type Context } from "effect";
 import { executeQuery, Queryable } from "../services/query.js";
 import { createDiffSheet } from "../services/diff.js";
+import { parseExplainFromQueryResult } from "../services/plan.js";
+import type { QueryResult } from "../services/query.js";
 
 /**
  * 1つのクエリを実行する。
@@ -73,6 +75,24 @@ export function createPageRoute(deps: {
     const diff =
       a.result && b.result ? createDiffSheet(a.result, b.result) : undefined;
 
+    const parseOnePlan = (result?: QueryResult) => {
+      if (!result) return { plan: undefined, error: undefined };
+      try {
+        return {
+          plan: parseExplainFromQueryResult(result),
+          error: undefined,
+        };
+      } catch (e) {
+        return {
+          plan: undefined,
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    };
+
+    const aPlanParsed = parseOnePlan(aPlan.result);
+    const bPlanParsed = parseOnePlan(bPlan.result);
+
     return c.html(
       <Index
         queryA={queryA}
@@ -82,10 +102,10 @@ export function createPageRoute(deps: {
         errorA={a.error}
         errorB={b.error}
         planMode={body?.planMode === "analyze" ? "analyze" : "explain"}
-        planResultA={aPlan.result}
-        planResultB={bPlan.result}
-        planErrorA={aPlan.error}
-        planErrorB={bPlan.error}
+        planResultA={aPlanParsed.plan}
+        planResultB={bPlanParsed.plan}
+        planErrorA={aPlanParsed.error ?? aPlan.error}
+        planErrorB={bPlanParsed.error ?? bPlan.error}
         planDiff={undefined}
         diff={diff}
       />,
