@@ -3,12 +3,24 @@
   "version": "0.0.0",
   "description": "Plan Parser for queot",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "keywords": [],
   "author": "",
   "license": "UNLICENSED",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "build": "tsc",
+    "test": "vitest",
     "check": "pnpm \"/^check:.*/\"",
     "check:prettier": "prettier . --check",
     "check:eslint": "eslint",
@@ -16,12 +28,18 @@
     "fix:prettier": "prettier . --write",
     "fix:eslint": "eslint --fix"
   },
+  "dependencies": {
+    "effect": "^3.19.12"
+  },
   "devDependencies": {
     "@eslint/js": "catalog:",
     "@tsconfig/node24": "^24.0.3",
+    "@types/node": "^24.10.3",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",
     "prettier": "catalog:",
-    "typescript-eslint": "catalog:"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "catalog:",
+    "vitest": "^4.0.16"
   }
 }
