@@ -15,7 +15,7 @@ function runOne(query: string) {
   if (trimmed.length === 0)
     return Effect.succeed({
       result: undefined,
-      error: 'EMPTY_QUERY',
+      error: "EMPTY_QUERY",
     });
 
   return executeQuery(trimmed).pipe(
@@ -24,10 +24,13 @@ function runOne(query: string) {
       error: undefined,
     })),
     Effect.catchAll((e) =>
-      Effect.succeed({ result: undefined, error: e instanceof Error ? e.message : String(e) }),
+      Effect.succeed({
+        result: undefined,
+        error: e instanceof Error ? e.message : String(e),
+      }),
     ),
   );
-};
+}
 
 export function createPageRoute(deps: {
   queryable: Context.Tag.Service<typeof Queryable>;

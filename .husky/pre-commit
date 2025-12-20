@@ -1,1 +1,1 @@
-pnpm check
+pnpm -r --if-present run check
