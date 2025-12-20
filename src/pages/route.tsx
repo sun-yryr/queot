@@ -5,6 +5,30 @@ import { Effect, type Context } from "effect";
 import { executeQuery, Queryable } from "../services/query.js";
 import { createDiffSheet } from "../services/diff.js";
 
+/**
+ * 1つのクエリを実行する。
+ * @param query - 実行するクエリ
+ * @returns 実行結果のEffect
+ */
+function runOne(query: string) {
+  const trimmed = query.trim();
+  if (trimmed.length === 0)
+    return Effect.succeed({
+      result: undefined,
+      error: 'EMPTY_QUERY',
+    });
+
+  return executeQuery(trimmed).pipe(
+    Effect.map((result) => ({
+      result,
+      error: undefined,
+    })),
+    Effect.catchAll((e) =>
+      Effect.succeed({ result: undefined, error: e instanceof Error ? e.message : String(e) }),
+    ),
+  );
+};
+
 export function createPageRoute(deps: {
   queryable: Context.Tag.Service<typeof Queryable>;
 }) {
@@ -16,54 +40,7 @@ export function createPageRoute(deps: {
     const queryB = typeof body?.queryB === "string" ? body.queryB : "";
     const planMode = body?.planMode === "analyze" ? "analyze" : "explain";
 
-    const runOne = (query: string) => {
-      const trimmed = query.trim();
-      if (trimmed.length === 0)
-        return Effect.succeed({
-          result: undefined,
-          error: undefined,
-          planResult: undefined,
-          planError: undefined,
-        });
-
       const planPrefix = planMode === "analyze" ? "EXPLAIN ANALYZE" : "EXPLAIN";
-      const runPlan = executeQuery(`${planPrefix} ${trimmed}`).pipe(
-        Effect.map((result) => ({
-          result,
-          error: undefined as string | undefined,
-        })),
-        Effect.catchAll((e) =>
-          Effect.succeed({
-            result: undefined,
-            error: e instanceof Error ? e.message : String(e),
-          }),
-        ),
-      );
-
-      return executeQuery(trimmed).pipe(
-        Effect.flatMap((queryResult) =>
-          runPlan.pipe(
-            Effect.map((plan) => ({
-              result: queryResult,
-              error: undefined as string | undefined,
-              planResult: plan.result,
-              planError: plan.error,
-            })),
-          ),
-        ),
-        Effect.catchAll((e) =>
-          runPlan.pipe(
-            Effect.map((plan) => ({
-              result: undefined,
-              error: e instanceof Error ? e.message : String(e),
-              planResult: plan.result,
-              planError: plan.error,
-            })),
-          ),
-        ),
-      );
-    };
-
     // 1つのトランザクションで2つのクエリを実行する。
     const program = Effect.gen(function* () {
       const connection = yield* Queryable;
@@ -73,8 +50,10 @@ export function createPageRoute(deps: {
         () => {
           return Effect.gen(function* () {
             const a = yield* runOne(queryA);
+            const aPlan = yield* runOne(`${planPrefix} ${queryA}`);
             const b = yield* runOne(queryB);
-            return { a, b };
+            const bPlan = yield* runOne(`${planPrefix} ${queryB}`);
+            return { a, aPlan, b, bPlan };
           });
         },
         () =>
@@ -84,13 +63,9 @@ export function createPageRoute(deps: {
       );
     }).pipe(Effect.provideService(Queryable, deps.queryable));
 
-    const { a, b } = await Effect.runPromise(program);
+    const { a, aPlan, b, bPlan } = await Effect.runPromise(program);
     const diff =
       a.result && b.result ? createDiffSheet(a.result, b.result) : undefined;
-    const planDiff =
-      a.planResult && b.planResult
-        ? createDiffSheet(a.planResult, b.planResult)
-        : undefined;
 
     return c.html(
       <Index
@@ -100,12 +75,12 @@ export function createPageRoute(deps: {
         resultB={b.result}
         errorA={a.error}
         errorB={b.error}
-        planMode={planMode}
-        planResultA={a.planResult}
-        planResultB={b.planResult}
-        planErrorA={a.planError}
-        planErrorB={b.planError}
-        planDiff={planDiff}
+        planMode={body?.planMode === "analyze" ? "analyze" : "explain"}
+        planResultA={aPlan.result}
+        planResultB={bPlan.result}
+        planErrorA={aPlan.error}
+        planErrorB={bPlan.error}
+        planDiff={undefined}
         diff={diff}
       />,
     );
