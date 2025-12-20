@@ -1,0 +1,27 @@
+{
+  "name": "@sun-yryr/queot-planparser",
+  "version": "0.0.0",
+  "description": "Plan Parser for queot",
+  "type": "module",
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.25.0",
+  "scripts": {
+    "build": "tsc",
+    "check": "pnpm \"/^check:.*/\"",
+    "check:prettier": "prettier . --check",
+    "check:eslint": "eslint",
+    "fix": "pnpm \"/^fix:.+$/\"",
+    "fix:prettier": "prettier . --write",
+    "fix:eslint": "eslint --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "catalog:",
+    "@tsconfig/node24": "^24.0.3",
+    "eslint": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "prettier": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}
