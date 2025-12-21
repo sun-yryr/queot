@@ -56,6 +56,11 @@ export function App() {
   const [queryA, setQueryA] = useState(DEFAULT_QUERY);
   const [queryB, setQueryB] = useState("");
   const [planMode, setPlanMode] = useState<PlanMode>("explain");
+  // 結果として表示すべき planMode（最後に /api/run が返した値）。
+  // フォームの選択（planMode）と分離して、フォームを弄っても「前回実行した結果のモード」が変わらないようにする。
+  const [planModeForResult, setPlanModeForResult] = useState<
+    PlanMode | undefined
+  >(undefined);
 
   const [loading, setLoading] = useState(false);
   const [resultTab, setResultTab] = useState<ResultTab>("diff");
@@ -77,7 +82,9 @@ export function App() {
   const [planErrorA, setPlanErrorA] = useState<string | undefined>(undefined);
   const [planErrorB, setPlanErrorB] = useState<string | undefined>(undefined);
 
-  const hasAnyQueryResultOrError = Boolean(resultA || resultB || errorA || errorB);
+  const hasAnyQueryResultOrError = Boolean(
+    resultA || resultB || errorA || errorB,
+  );
   const hasAnyPlanOrError = Boolean(
     planResultA || planResultB || planErrorA || planErrorB,
   );
@@ -134,7 +141,7 @@ export function App() {
     const ro = new ResizeObserver(() => calc());
     for (const el of els) ro.observe(el);
     return () => ro.disconnect();
-  }, [planResultA, planResultB, planErrorA, planErrorB, planMode]);
+  }, [planResultA, planResultB, planErrorA, planErrorB]);
 
   const tabClass = (active: boolean) =>
     [
@@ -186,6 +193,7 @@ export function App() {
       setPlanResultB(data.planResultB);
       setPlanErrorA(data.planErrorA);
       setPlanErrorB(data.planErrorB);
+      setPlanModeForResult(data.planMode);
 
       // 初期表示: 差分がない（= 完全一致）なら Result を閉じる。
       // ただし片側しか結果がない場合は Result を開いて見えるようにする。
@@ -207,6 +215,7 @@ export function App() {
       setDiff(undefined);
       setPlanResultA(undefined);
       setPlanResultB(undefined);
+      setPlanModeForResult(undefined);
       setResultOpen(true);
     } finally {
       setLoading(false);
@@ -456,21 +465,32 @@ export function App() {
                   "rounded-xl border border-zinc-200/70 bg-white/40 p-3 dark:border-zinc-800/60 dark:bg-zinc-950/10",
                 ].join(" ")}
               >
-                <div class="flex items-baseline justify-between gap-3">
-                  <div>
-                    <h3 class="m-0 text-sm font-bold text-zinc-700 dark:text-zinc-200">
-                      実行計画（Execution Plan）
-                    </h3>
-                    <div class="text-xs text-zinc-500 dark:text-zinc-400">
-                      {planMode === "analyze"
-                        ? "EXPLAIN ANALYZE を付与して実行計画を取得しています。"
-                        : "EXPLAIN を付与して実行計画を取得しています。"}
+                {/*
+                  表示に使う planMode は「前回実行した結果」に紐づくものを優先する。
+                  （フォーム側の切替で結果表示が変わらないようにする）
+                */}
+                {(() => {
+                  const shownPlanMode: PlanMode = planModeForResult ?? planMode;
+                  return (
+                    <div class="flex items-baseline justify-between gap-3">
+                      <div>
+                        <h3 class="m-0 text-sm font-bold text-zinc-700 dark:text-zinc-200">
+                          実行計画（Execution Plan）
+                        </h3>
+                        <div class="text-xs text-zinc-500 dark:text-zinc-400">
+                          {shownPlanMode === "analyze"
+                            ? "EXPLAIN ANALYZE を付与して実行計画を取得しています。"
+                            : "EXPLAIN を付与して実行計画を取得しています。"}
+                        </div>
+                      </div>
+                      <div class="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-3 py-1 text-xs font-extrabold">
+                        {shownPlanMode === "analyze"
+                          ? "EXPLAIN ANALYZE"
+                          : "EXPLAIN"}
+                      </div>
                     </div>
-                  </div>
-                  <div class="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-3 py-1 text-xs font-extrabold">
-                    {planMode === "analyze" ? "EXPLAIN ANALYZE" : "EXPLAIN"}
-                  </div>
-                </div>
+                  );
+                })()}
 
                 <div class="mt-3">
                   <div class="inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">

@@ -661,7 +661,8 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
       </div>
 
       <div class="border-t border-zinc-200/50 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800/50 dark:text-zinc-400">
-        edge width: rows / ヒント: 横/縦に大きい場合はスクロールできます。ノードクリックで詳細表示。
+        edge width: rows / ヒント:
+        横/縦に大きい場合はスクロールできます。ノードクリックで詳細表示。
       </div>
 
       {selected ? (
