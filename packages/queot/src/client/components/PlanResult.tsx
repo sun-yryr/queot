@@ -1,4 +1,4 @@
-import { useState } from "hono/jsx/dom";
+import { useEffect, useMemo, useRef, useState } from "hono/jsx/dom";
 import type { FC } from "hono/jsx";
 import type { ExplainParseResult } from "@sun-yryr/queot-planparser";
 import type { PlanNode, PlanTree } from "@sun-yryr/queot-planparser";
@@ -396,18 +396,66 @@ function layoutPlanTree(root: PlanNode) {
 
 const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
   const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
-  const byId = buildNodeMap(root);
+  const byId = useMemo(() => buildNodeMap(root), [root]);
   const selected = selectedId ? byId.get(selectedId) : undefined;
 
-  const g = layoutPlanTree(root);
-  const maxRows = (() => {
+  const g = useMemo(() => layoutPlanTree(root), [root]);
+  const maxRows = useMemo(() => {
     let m = 0;
     for (const n of byId.values()) {
       const r = pickRowsForViz(n);
       if (r !== undefined && Number.isFinite(r)) m = Math.max(m, r);
     }
     return m;
-  })();
+  }, [byId]);
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr =
+      typeof window !== "undefined" ? (window.devicePixelRatio ?? 1) : 1;
+    const w = Math.max(1, Math.ceil(g.width));
+    const h = Math.max(1, Math.ceil(g.height));
+
+    canvas.width = Math.ceil(w * dpr);
+    canvas.height = Math.ceil(h * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = "rgba(113,113,122,0.35)"; // zinc-500/35
+
+    for (const e of g.edges) {
+      const from = g.nodeById.get(e.fromId);
+      const to = g.nodeById.get(e.toId);
+      if (!from || !to) continue;
+
+      const x1 = from.x + from.w / 2;
+      const y1 = from.y + from.h;
+      const x2 = to.x + to.w / 2;
+      const y2 = to.y;
+      const midY = (y1 + y2) / 2;
+
+      const toPlan = byId.get(e.toId);
+      const rows = toPlan ? pickRowsForViz(toPlan) : undefined;
+      const lw = edgeStrokeWidth(rows, maxRows);
+
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1, midY);
+      ctx.lineTo(x2, midY);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+  }, [byId, g, maxRows]);
 
   const kindAccent = (k: GraphNode["kind"]) => {
     switch (k) {
@@ -454,44 +502,11 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
             ].join("")}
           />
 
-          {/* edges (orthogonal) */}
-          {g.edges.map((e) => {
-            const from = g.nodeById.get(e.fromId);
-            const to = g.nodeById.get(e.toId);
-            if (!from || !to) return null;
-
-            const x1 = from.x + from.w / 2;
-            const y1 = from.y + from.h;
-            const x2 = to.x + to.w / 2;
-            const y2 = to.y;
-            const midY = (y1 + y2) / 2;
-
-            const toPlan = byId.get(e.toId);
-            const rows = toPlan ? pickRowsForViz(toPlan) : undefined;
-            const w = edgeStrokeWidth(rows, maxRows);
-
-            const v1H = Math.max(0, midY - y1);
-            const v2H = Math.max(0, y2 - midY);
-            const hW = Math.abs(x2 - x1);
-            const hL = Math.min(x1, x2);
-
-            return (
-              <div class="pointer-events-none">
-                <div
-                  class="absolute rounded-full bg-zinc-500/35"
-                  style={`left:${x1 - w / 2}px;top:${y1}px;width:${w}px;height:${v1H}px`}
-                />
-                <div
-                  class="absolute rounded-full bg-zinc-500/35"
-                  style={`left:${hL}px;top:${midY - w / 2}px;width:${hW}px;height:${w}px`}
-                />
-                <div
-                  class="absolute rounded-full bg-zinc-500/35"
-                  style={`left:${x2 - w / 2}px;top:${midY}px;width:${w}px;height:${v2H}px`}
-                />
-              </div>
-            );
-          })}
+          {/* edges (canvas) */}
+          <canvas
+            ref={canvasRef}
+            class="pointer-events-none absolute left-0 top-0"
+          />
 
           {/* nodes */}
           {g.nodes.map((n) => {
@@ -631,7 +646,7 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
 }) => {
   const planning = tree.meta.planningTimeMs;
   const execution = tree.meta.executionTimeMs;
-  const [view, setView] = useState<"graph" | "text">("text");
+  const [view, setView] = useState<"graph" | "text">("graph");
   const tabClass = (active: boolean) =>
     [
       "cursor-pointer select-none rounded-lg border border-transparent px-3 py-1.5 text-xs font-extrabold",
