@@ -49,10 +49,10 @@ function isDaffOmittedRow(row: unknown[] | undefined): boolean {
 
 function classifyMetaCell(text: string): string {
   // daff のメタ行（例: "!" 行）は列の増減や名称変更を表すことがある
-  if (text === "+++") return "diffColAdded";
-  if (text === "---") return "diffColRemoved";
-  if (text === "->" || text.includes("->")) return "diffColChanged";
-  if (text.startsWith("(") && text.endsWith(")")) return "diffColChanged";
+  if (text === "+++") return "!bg-emerald-500/20";
+  if (text === "---") return "!bg-red-500/20";
+  if (text === "->" || text.includes("->")) return "bg-amber-400/20";
+  if (text.startsWith("(") && text.endsWith(")")) return "bg-amber-400/20";
   return "";
 }
 
@@ -65,7 +65,7 @@ type Props = {
 export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
   if (!hasBothResults) {
     return (
-      <div class="meta">
+      <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
         {emptyMessage ?? "Diffには Query A と Query B 両方の結果が必要です。"}
       </div>
     );
@@ -82,7 +82,11 @@ export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
   });
 
   if (!diffHasChanges) {
-    return <div class="meta">完全に一致（差分なし）</div>;
+    return (
+      <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+        完全に一致（差分なし）
+      </div>
+    );
   }
 
   const headerRowIndex = diffRows.findIndex((r) => isDaffHeaderRow(r));
@@ -114,50 +118,58 @@ export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
   }
 
   return (
-    <div class="result">
-      <details class="disclosure diffLegend" open={false}>
-        <summary class="disclosureSummary">
-          <span class="disclosureTitle">Diffの見方</span>
-          <span class="disclosureHint">（クリックで開閉）</span>
+    <div class="mt-3 max-h-[540px] overflow-auto rounded-xl border border-zinc-200/60 bg-white/60 dark:border-zinc-800/60 dark:bg-zinc-950/20">
+      <details class="mb-3 overflow-hidden rounded-xl border border-zinc-200/60 bg-zinc-50/70 dark:border-zinc-800/60 dark:bg-zinc-900/20">
+        <summary class="flex cursor-pointer list-none items-baseline justify-between gap-3 select-none px-3 py-2 [&::-webkit-details-marker]:hidden">
+          <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">
+            Diffの見方
+          </span>
+          <span class="text-xs text-zinc-500 dark:text-zinc-400">
+            （クリックで開閉）
+          </span>
         </summary>
-        <div class="disclosureBody diffLegendBody">
-          <div class="diffLegendGrid">
-            <div class="diffLegendItem">
-              <span class="diffLegendSwatch bg-emerald-500/20" />
-              <span class="diffLegendText">
+        <div class="border-t border-zinc-200/50 px-3 pb-3 dark:border-zinc-800/50">
+          <div class="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-2">
+            <div class="flex items-start gap-2">
+              <span class="mt-0.5 h-3.5 w-3.5 rounded border border-zinc-300/60 bg-emerald-500/20 dark:border-zinc-700/60" />
+              <span class="text-sm text-zinc-700 dark:text-zinc-200">
                 <b>追加</b>（行: <code>+++</code>）
               </span>
             </div>
-            <div class="diffLegendItem">
-              <span class="diffLegendSwatch bg-red-500/20" />
-              <span class="diffLegendText">
+            <div class="flex items-start gap-2">
+              <span class="mt-0.5 h-3.5 w-3.5 rounded border border-zinc-300/60 bg-red-500/20 dark:border-zinc-700/60" />
+              <span class="text-sm text-zinc-700 dark:text-zinc-200">
                 <b>削除</b>（行: <code>---</code>）
               </span>
             </div>
-            <div class="diffLegendItem">
-              <span class="diffLegendSwatch bg-amber-400/20" />
-              <span class="diffLegendText">
+            <div class="flex items-start gap-2">
+              <span class="mt-0.5 h-3.5 w-3.5 rounded border border-zinc-300/60 bg-amber-400/20 dark:border-zinc-700/60" />
+              <span class="text-sm text-zinc-700 dark:text-zinc-200">
                 <b>変更</b>（行: <code>-&gt;</code> / セル内:{" "}
                 <code>a-&gt;b</code>）
               </span>
             </div>
-            <div class="diffLegendItem">
-              <span class="diffLegendSwatch diffLegendSwatchMeta">!</span>
-              <span class="diffLegendText">
+            <div class="flex items-start gap-2">
+              <span class="mt-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-zinc-300/60 bg-zinc-200/60 text-[11px] font-black text-zinc-700 dark:border-zinc-700/60 dark:bg-zinc-800/60 dark:text-zinc-200">
+                !
+              </span>
+              <span class="text-sm text-zinc-700 dark:text-zinc-200">
                 <b>カラム変更</b>（ヘッダ上部の <code>!</code> 行）
-                <span class="diffLegendNote">
+                <span class="ml-1 text-zinc-500 dark:text-zinc-400">
                   追加/削除/名称変更はヘッダ色で表現
                 </span>
               </span>
             </div>
-            <div class="diffLegendItem">
-              <span class="diffLegendSwatch diffLegendSwatchMeta">…</span>
-              <span class="diffLegendText">
+            <div class="flex items-start gap-2">
+              <span class="mt-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-zinc-300/60 bg-zinc-200/60 text-[11px] font-black text-zinc-700 dark:border-zinc-700/60 dark:bg-zinc-800/60 dark:text-zinc-200">
+                …
+              </span>
+              <span class="text-sm text-zinc-700 dark:text-zinc-200">
                 <b>省略</b>（間の行が省略されていることがあります）
               </span>
             </div>
-            <div class="diffLegendItem">
-              <span class="diffLegendText">
+            <div class="flex items-start gap-2">
+              <span class="text-sm text-zinc-700 dark:text-zinc-200">
                 <b>優先順位</b>:
                 カラム削除（赤）は行追加（緑）より優先して表示します。
               </span>
@@ -165,27 +177,51 @@ export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
           </div>
         </div>
       </details>
-      <table class="diffTable">
+      <table class="w-full border-collapse text-sm">
         <thead>
           {theadRows.map((row, rowIndex) => {
-            const rowClass = isDaffMetaRow(row)
-              ? "diffHeadMetaRow"
-              : isDaffHeaderRow(row)
-                ? "diffHeadHeaderRow"
-                : "diffHeadOtherRow";
-
             // stickyヘッダが複数行あると重なりやすいので、行インデックス分だけ top をずらす
             const topPx = rowIndex * 32;
 
             return (
-              <tr class={rowClass}>
+              <tr>
                 {row.map((cell, i) => {
                   const text = cellText(cell);
-                  const cellClass =
-                    isDaffMetaRow(row) && i > 0 ? classifyMetaCell(text) : "";
+                  const isMeta = isDaffMetaRow(row);
+                  const isHeader = isDaffHeaderRow(row);
+                  const metaBg = isMeta
+                    ? "bg-zinc-200/40 dark:bg-zinc-800/40"
+                    : "";
+                  const headerBg = isHeader
+                    ? "bg-zinc-100/70 dark:bg-zinc-900/60"
+                    : "bg-zinc-100/40 dark:bg-zinc-900/40";
+                  const base = [
+                    "sticky",
+                    "text-left",
+                    "backdrop-blur",
+                    "border-b",
+                    "border-zinc-200/70",
+                    "dark:border-zinc-800/60",
+                    "px-2.5",
+                    "py-2",
+                    "font-bold",
+                    isMeta ? metaBg : headerBg,
+                    isMeta ? "text-zinc-700 dark:text-zinc-200" : "",
+                    isHeader ? "font-extrabold" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ");
+
+                  const cellBg = isMeta && i > 0 ? classifyMetaCell(text) : "";
                   return (
                     <th
-                      class={[i === 0 ? "diffMarker" : "", cellClass]
+                      class={[
+                        base,
+                        i === 0
+                          ? "w-[52px] text-center font-bold text-zinc-600 dark:text-zinc-300"
+                          : "",
+                        cellBg,
+                      ]
                         .filter(Boolean)
                         .join(" ")}
                       style={`top:${topPx}px`}
@@ -203,13 +239,13 @@ export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
             const marker = cellText(row?.[0]);
             const rowClass =
               marker === "+++"
-                ? "diffRowAdded"
+                ? "[&>td]:bg-emerald-500/10"
                 : marker === "---"
-                  ? "diffRowRemoved"
+                  ? "[&>td]:bg-red-500/10"
                   : marker === "->"
-                    ? "diffRowChanged"
+                    ? "[&>td]:bg-amber-400/10"
                     : isDaffOmittedRow(row)
-                      ? "diffRowOmitted"
+                      ? "text-center italic [&>td]:text-zinc-500 dark:[&>td]:text-zinc-400"
                       : "";
 
             return (
@@ -221,15 +257,25 @@ export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
                   const colClass = i > 0 ? colClassByIndex[i] : "";
                   return (
                     <td
-                      class={[i === 0 ? "diffMarker" : "", colClass]
+                      class={[
+                        "border-b border-zinc-200/70 px-2.5 py-2 align-top dark:border-zinc-800/60",
+                        i === 0
+                          ? "w-[52px] text-center font-bold text-zinc-600 dark:text-zinc-300"
+                          : "font-mono text-[12.5px]",
+                        colClass,
+                      ]
                         .filter(Boolean)
                         .join(" ")}
                     >
                       {arrow ? (
-                        <span class="diffCell">
-                          <span class="diffCellOld">{arrow.before}</span>
-                          <span class="diffCellArrow">→</span>
-                          <span class="diffCellNew">{arrow.after}</span>
+                        <span class="inline-flex flex-wrap items-baseline gap-1.5">
+                          <span class="text-zinc-500 line-through dark:text-zinc-400">
+                            {arrow.before}
+                          </span>
+                          <span class="text-zinc-500/80 dark:text-zinc-400/80">
+                            →
+                          </span>
+                          <span class="font-bold">{arrow.after}</span>
                         </span>
                       ) : (
                         text

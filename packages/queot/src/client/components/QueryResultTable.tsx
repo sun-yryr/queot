@@ -40,14 +40,20 @@ export const QueryResultTable: FC<Props> = ({
 }) => {
   return (
     <>
-      {error ? <div class="error">{error}</div> : null}
+      {error ? (
+        <div class="mt-3 whitespace-pre-wrap rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm">
+          {error}
+        </div>
+      ) : null}
       {result ? (
-        <div class="result">
-          <table>
+        <div class="mt-3 max-h-[540px] overflow-auto rounded-xl border border-zinc-200/60 bg-white/60 dark:border-zinc-800/60 dark:bg-zinc-950/20">
+          <table class="w-full border-collapse text-sm">
             <thead>
               <tr>
                 {result.fields.map((f) => (
-                  <th>{f.name}</th>
+                  <th class="sticky top-0 bg-zinc-100/70 px-2.5 py-2 text-left font-bold backdrop-blur dark:bg-zinc-900/60">
+                    {f.name}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -57,17 +63,23 @@ export const QueryResultTable: FC<Props> = ({
                 return (
                   <tr>
                     {result.fields.map((f) => (
-                      <td>{cellText(row[f.name])}</td>
+                      <td class="border-b border-zinc-200/70 px-2.5 py-2 align-top font-mono text-[12.5px] dark:border-zinc-800/60">
+                        {cellText(row[f.name])}
+                      </td>
                     ))}
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          <div class="meta">{result.rows.length} row(s)</div>
+          <div class="mt-2 px-3 pb-3 text-xs text-zinc-500 dark:text-zinc-400">
+            {result.rows.length} row(s)
+          </div>
         </div>
       ) : (
-        <div class="meta">{emptyMessage}</div>
+        <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+          {emptyMessage}
+        </div>
       )}
     </>
   );

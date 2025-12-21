@@ -44,6 +44,15 @@ export function App() {
   );
   const hasAnyError = Boolean(errorA || errorB || planErrorA || planErrorB);
 
+  const tabClass = (active: boolean) =>
+    [
+      "cursor-pointer select-none rounded-lg border border-transparent px-3 py-1.5 text-xs font-bold",
+      "text-zinc-700 hover:bg-zinc-200/40 dark:text-zinc-200 dark:hover:bg-zinc-800/40",
+      active ? "border-indigo-500/30 bg-indigo-500/15" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
   async function run(): Promise<void> {
     setLoading(true);
     try {
@@ -93,38 +102,44 @@ export function App() {
   }
 
   return (
-    <div class="container">
-      <header class="header">
+    <div class="mx-auto max-w-5xl px-6 py-6">
+      <header class="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h1 class="title">queot — Query Console</h1>
-          <p class="subtitle">
+          <h1 class="m-0 text-lg font-bold">queot — Query Console</h1>
+          <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
             フォームでSQLを送信し、JSON API（/api/run）経由で結果を表示します。
           </p>
         </div>
       </header>
 
-      <main class="main">
-        <section class="panel">
-          <details class="disclosure sqlEditor" open={true}>
-            <summary class="disclosureSummary">
-              <span class="disclosureTitle">SQL</span>
-              <span class="disclosureHint">（クリックで開閉）</span>
+      <main class="grid gap-4">
+        <section class="rounded-xl border border-zinc-200/70 bg-zinc-50/60 p-4 dark:border-zinc-800/60 dark:bg-zinc-900/20">
+          <details open={true}>
+            <summary class="flex cursor-pointer list-none items-baseline justify-between gap-3 select-none [&::-webkit-details-marker]:hidden">
+              <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                SQL
+              </span>
+              <span class="text-xs text-zinc-500 dark:text-zinc-400">
+                （クリックで開閉）
+              </span>
             </summary>
-            <div class="disclosureBody">
+            <div class="mt-2">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
                   void run();
                 }}
               >
-                <div class="sqlGrid">
-                  <div class="sqlCol">
-                    <div class="sqlLabelRow">
-                      <span class="sqlLabel">Query A</span>
+                <div class="mt-2 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                  <div class="flex flex-col">
+                    <div class="flex items-baseline justify-between">
+                      <span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                        Query A
+                      </span>
                     </div>
                     <textarea
                       id="sqlA"
-                      class="textarea"
+                      class="mt-2 w-full rounded-xl border border-zinc-300/70 bg-white/70 px-3 py-2 font-mono text-sm leading-snug shadow-sm outline-none focus:ring-2 focus:ring-indigo-400/50 dark:border-zinc-700/70 dark:bg-zinc-950/40"
                       spellcheck={false}
                       rows={10}
                       value={queryA}
@@ -136,13 +151,15 @@ export function App() {
                     />
                   </div>
 
-                  <div class="sqlCol">
-                    <div class="sqlLabelRow">
-                      <span class="sqlLabel">Query B</span>
+                  <div class="flex flex-col">
+                    <div class="flex items-baseline justify-between">
+                      <span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                        Query B
+                      </span>
                     </div>
                     <textarea
                       id="sqlB"
-                      class="textarea"
+                      class="mt-2 w-full rounded-xl border border-zinc-300/70 bg-white/70 px-3 py-2 font-mono text-sm leading-snug shadow-sm outline-none focus:ring-2 focus:ring-indigo-400/50 dark:border-zinc-700/70 dark:bg-zinc-950/40"
                       spellcheck={false}
                       rows={10}
                       value={queryB}
@@ -155,15 +172,17 @@ export function App() {
                   </div>
                 </div>
 
-                <div class="sqlOptions">
-                  <div class="sqlLabelRow">
-                    <span class="sqlLabel">実行計画</span>
-                    <span class="hint">
+                <div class="mt-3 flex flex-col gap-1.5">
+                  <div class="flex items-baseline justify-between">
+                    <span class="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                      実行計画
+                    </span>
+                    <span class="text-xs text-zinc-500 dark:text-zinc-400">
                       EXPLAIN / EXPLAIN ANALYZE を自動付与
                     </span>
                   </div>
-                  <div class="planModeRow">
-                    <label class="planModeOption">
+                  <div class="flex flex-wrap items-center gap-3">
+                    <label class="inline-flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300">
                       <input
                         type="radio"
                         name="planMode"
@@ -173,7 +192,7 @@ export function App() {
                       />
                       EXPLAIN
                     </label>
-                    <label class="planModeOption">
+                    <label class="inline-flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300">
                       <input
                         type="radio"
                         name="planMode"
@@ -186,8 +205,12 @@ export function App() {
                   </div>
                 </div>
 
-                <div class="actions">
-                  <button type="submit" class="button" disabled={loading}>
+                <div class="mt-2 flex items-center gap-3">
+                  <button
+                    type="submit"
+                    class="inline-flex items-center justify-center rounded-xl border border-zinc-300/70 bg-white px-3 py-2 text-sm font-semibold shadow-sm hover:bg-zinc-50 active:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700/70 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/50"
+                    disabled={loading}
+                  >
                     {loading ? "Running..." : "Run"}
                   </button>
                 </div>
@@ -196,142 +219,129 @@ export function App() {
           </details>
         </section>
 
-        <section class="panel">
-          <div class="row">
-            <h2 class="h2">Result</h2>
+        <section class="rounded-xl border border-zinc-200/70 bg-zinc-50/60 p-4 dark:border-zinc-800/60 dark:bg-zinc-900/20">
+          <div class="flex items-baseline justify-between gap-3">
+            <h2 class="m-0 text-sm font-bold text-zinc-700 dark:text-zinc-200">
+              Result
+            </h2>
           </div>
 
           {hasAnyResult || hasAnyError ? (
             <>
-              <div class="tabsRoot">
-                <input
-                  class="tabInput"
-                  type="radio"
-                  name="resultTab"
-                  id="tabDiff"
-                  checked={resultTab === "diff"}
-                  onChange={() => setResultTab("diff")}
-                />
-                <input
-                  class="tabInput"
-                  type="radio"
-                  name="resultTab"
-                  id="tabA"
-                  checked={resultTab === "a"}
-                  onChange={() => setResultTab("a")}
-                />
-                <input
-                  class="tabInput"
-                  type="radio"
-                  name="resultTab"
-                  id="tabB"
-                  checked={resultTab === "b"}
-                  onChange={() => setResultTab("b")}
-                />
-
-                <div class="tabs">
-                  <label class="tab" for="tabDiff">
+              <div class="mt-3">
+                <div class="inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">
+                  <button
+                    type="button"
+                    class={tabClass(resultTab === "diff")}
+                    onClick={() => setResultTab("diff")}
+                  >
                     Diff
-                  </label>
-                  <label class="tab" for="tabA">
+                  </button>
+                  <button
+                    type="button"
+                    class={tabClass(resultTab === "a")}
+                    onClick={() => setResultTab("a")}
+                  >
                     Query A
-                  </label>
-                  <label class="tab" for="tabB">
+                  </button>
+                  <button
+                    type="button"
+                    class={tabClass(resultTab === "b")}
+                    onClick={() => setResultTab("b")}
+                  >
                     Query B
-                  </label>
+                  </button>
                 </div>
 
-                <div class="panels">
-                  <section id="panelDiff" class="panelBody">
-                    <DiffView
-                      diff={diff}
-                      hasBothResults={Boolean(resultA && resultB)}
-                    />
-                  </section>
-
-                  <section id="panelA" class="panelBody">
-                    <QueryResultTable
-                      result={resultA}
-                      error={errorA}
-                      emptyMessage="Query Aは未実行/空です。"
-                    />
-                  </section>
-
-                  <section id="panelB" class="panelBody">
-                    <QueryResultTable
-                      result={resultB}
-                      error={errorB}
-                      emptyMessage="Query Bは未実行/空です。"
-                    />
-                  </section>
+                <div class="mt-3">
+                  {resultTab === "diff" ? (
+                    <section>
+                      <DiffView
+                        diff={diff}
+                        hasBothResults={Boolean(resultA && resultB)}
+                      />
+                    </section>
+                  ) : resultTab === "a" ? (
+                    <section>
+                      <QueryResultTable
+                        result={resultA}
+                        error={errorA}
+                        emptyMessage="Query Aは未実行/空です。"
+                      />
+                    </section>
+                  ) : (
+                    <section>
+                      <QueryResultTable
+                        result={resultB}
+                        error={errorB}
+                        emptyMessage="Query Bは未実行/空です。"
+                      />
+                    </section>
+                  )}
                 </div>
               </div>
 
-              <section class="planSection">
-                <div class="row planHeader">
+              <section class="mt-5 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/60">
+                <div class="flex items-baseline justify-between gap-3">
                   <div>
-                    <h3 class="h3">Execution Plan</h3>
-                    <div class="hint">
+                    <h3 class="m-0 text-sm font-bold text-zinc-700 dark:text-zinc-200">
+                      Execution Plan
+                    </h3>
+                    <div class="text-xs text-zinc-500 dark:text-zinc-400">
                       {planMode === "analyze"
                         ? "EXPLAIN ANALYZE を付与して実行計画を取得しています。"
                         : "EXPLAIN を付与して実行計画を取得しています。"}
                     </div>
                   </div>
-                  <div class="planModeBadge">
+                  <div class="rounded-full border border-indigo-500/30 bg-indigo-500/15 px-3 py-1 text-xs font-extrabold">
                     {planMode === "analyze" ? "EXPLAIN ANALYZE" : "EXPLAIN"}
                   </div>
                 </div>
 
-                <div class="tabsRoot">
-                  <input
-                    class="tabInput"
-                    type="radio"
-                    name="planTab"
-                    id="planTabA"
-                    checked={planTab === "a"}
-                    onChange={() => setPlanTab("a")}
-                  />
-                  <input
-                    class="tabInput"
-                    type="radio"
-                    name="planTab"
-                    id="planTabB"
-                    checked={planTab === "b"}
-                    onChange={() => setPlanTab("b")}
-                  />
-
-                  <div class="tabs">
-                    <label class="tab" for="planTabA">
+                <div class="mt-3">
+                  <div class="inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">
+                    <button
+                      type="button"
+                      class={tabClass(planTab === "a")}
+                      onClick={() => setPlanTab("a")}
+                    >
                       Plan A
-                    </label>
-                    <label class="tab" for="planTabB">
+                    </button>
+                    <button
+                      type="button"
+                      class={tabClass(planTab === "b")}
+                      onClick={() => setPlanTab("b")}
+                    >
                       Plan B
-                    </label>
+                    </button>
                   </div>
 
-                  <div class="panels">
-                    <section id="planPanelA" class="panelBody">
-                      <PlanResult
-                        result={planResultA}
-                        error={
-                          planErrorA ?? "Query Aの実行計画は未実行/空です。"
-                        }
-                      />
-                    </section>
-                    <section id="planPanelB" class="panelBody">
-                      <PlanResult
-                        result={planResultB}
-                        error={
-                          planErrorB ?? "Query Bの実行計画は未実行/空です。"
-                        }
-                      />
-                    </section>
+                  <div class="mt-3">
+                    {planTab === "a" ? (
+                      <section>
+                        <PlanResult
+                          result={planResultA}
+                          error={
+                            planErrorA ?? "Query Aの実行計画は未実行/空です。"
+                          }
+                        />
+                      </section>
+                    ) : (
+                      <section>
+                        <PlanResult
+                          result={planResultB}
+                          error={
+                            planErrorB ?? "Query Bの実行計画は未実行/空です。"
+                          }
+                        />
+                      </section>
+                    )}
                   </div>
                 </div>
               </section>
             </>
           ) : (
-            <div class="meta">
+            <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
               まだ結果はありません。上のフォームから実行してください。
             </div>
           )}

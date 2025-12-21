@@ -1,3 +1,4 @@
+import { useState } from "hono/jsx/dom";
 import type { FC } from "hono/jsx";
 import type { ExplainParseResult } from "@sun-yryr/queot-planparser";
 import type { PlanNode, PlanTree } from "@sun-yryr/queot-planparser";
@@ -227,9 +228,9 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
   const g = layoutPlanTree(root);
 
   return (
-    <div class="planGraphWrap">
+    <div class="mx-3 overflow-auto rounded-xl border border-zinc-200/60 bg-white/50 dark:border-zinc-800/60 dark:bg-zinc-950/20">
       <svg
-        class="planGraph"
+        class="block"
         width="100%"
         height={Math.max(240, g.height)}
         viewBox={`0 0 ${g.width} ${g.height}`}
@@ -254,7 +255,9 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
           const y2 = to.y;
           const midY = (y1 + y2) / 2;
           const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-          return <path d={d} class="planGraphEdge" />;
+          return (
+            <path d={d} class="fill-none stroke-zinc-500/40" stroke-width="2" />
+          );
         })}
 
         {/* nodes */}
@@ -270,13 +273,23 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
                 width={g.constants.NODE_W}
                 height={g.constants.NODE_H}
                 rx="10"
-                class="planGraphNode"
+                fill="url(#planNodeFill)"
+                class="stroke-zinc-500/40"
+                stroke-width="1"
               />
-              <text x={x + 12} y={y + 18} class="planGraphTitle">
+              <text
+                x={x + 12}
+                y={y + 18}
+                class="fill-zinc-800 text-[12px] font-extrabold dark:fill-zinc-100"
+              >
                 {n.title}
               </text>
               {n.subtitle ? (
-                <text x={x + 12} y={y + 34} class="planGraphSub">
+                <text
+                  x={x + 12}
+                  y={y + 34}
+                  class="fill-zinc-500 text-[10.5px] font-bold dark:fill-zinc-400"
+                >
                   {n.subtitle}
                 </text>
               ) : null}
@@ -284,7 +297,7 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
           );
         })}
       </svg>
-      <div class="planGraphHint">
+      <div class="border-t border-zinc-200/50 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800/50 dark:text-zinc-400">
         ヒント:
         横に長い場合はスクロールできます。ノードにマウスオーバーで詳細表示。
       </div>
@@ -302,48 +315,66 @@ const PlanNodeView: FC<{ node: PlanNode }> = ({ node }) => {
   const openByDefault = node.depth <= 1;
 
   return (
-    <details class="planNode" open={openByDefault}>
+    <details
+      class="border-t border-zinc-200/50 dark:border-zinc-800/50 first:border-t-0"
+      open={openByDefault}
+    >
       <summary
-        class="planNodeSummary"
+        class="flex cursor-pointer list-none items-baseline justify-between gap-3 px-3 py-2 [&::-webkit-details-marker]:hidden"
         style={`padding-left:${node.depth * 16}px`}
       >
-        <span class="planNodeMain">
-          <span class="planNodeTitle">{title}</span>
-          {subtitle ? <span class="planNodeSub">{subtitle}</span> : null}
+        <span class="inline-flex flex-wrap items-baseline gap-2">
+          <span class="text-xs font-extrabold text-zinc-800 dark:text-zinc-100">
+            {title}
+          </span>
+          {subtitle ? (
+            <span class="text-[11px] text-zinc-500 dark:text-zinc-400">
+              {subtitle}
+            </span>
+          ) : null}
         </span>
       </summary>
 
-      <div class="planNodeBody" style={`padding-left:${node.depth * 16}px`}>
+      <div
+        class="grid gap-2 px-3 pb-3"
+        style={`padding-left:${node.depth * 16}px`}
+      >
         {metrics.length ? (
-          <div class="planNodeMetrics">
+          <div class="grid gap-1 text-[11px] text-zinc-600 dark:text-zinc-300">
             {metrics.map((m) => (
-              <div class="planNodeMetric">{m}</div>
+              <div class="font-mono">{m}</div>
             ))}
           </div>
         ) : null}
 
         {conditions.length ? (
-          <div class="planNodeConds">
+          <div class="grid gap-2">
             {conditions.map((c) => (
-              <div class="planNodeCond">
-                <span class="planNodeCondLabel">{c.label}</span>
-                <code class="planNodeCondValue">{c.value}</code>
+              <div class="grid gap-1">
+                <span class="text-[11px] font-extrabold text-zinc-500 dark:text-zinc-400">
+                  {c.label}
+                </span>
+                <code class="whitespace-pre-wrap text-[11px]">{c.value}</code>
               </div>
             ))}
           </div>
         ) : null}
 
         {node.children.length ? (
-          <div class="planNodeChildren">
+          <div class="grid">
             {node.children.map((c) => (
               <PlanNodeView node={c} />
             ))}
           </div>
         ) : null}
 
-        <details class="planNodeRaw">
-          <summary class="planNodeRawSummary">raw</summary>
-          <pre class="planNodeRawPre">{JSON.stringify(node.raw, null, 2)}</pre>
+        <details class="mt-1 overflow-hidden rounded-xl border border-dashed border-zinc-300/60 bg-zinc-100/40 dark:border-zinc-700/60 dark:bg-zinc-900/20">
+          <summary class="cursor-pointer list-none px-3 py-1.5 text-[11px] font-extrabold text-zinc-600 dark:text-zinc-300 [&::-webkit-details-marker]:hidden">
+            raw
+          </summary>
+          <pre class="m-0 max-h-60 overflow-auto px-3 py-2 text-[11px]">
+            {JSON.stringify(node.raw, null, 2)}
+          </pre>
         </details>
       </div>
     </details>
@@ -356,14 +387,23 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
 }) => {
   const planning = tree.meta.planningTimeMs;
   const execution = tree.meta.executionTimeMs;
-  const tabGraphId = `planViewGraph_${index}`;
-  const tabOutlineId = `planViewOutline_${index}`;
-  const tabName = `planViewTab_${index}`;
+  const [view, setView] = useState<"graph" | "outline">("graph");
+  const tabClass = (active: boolean) =>
+    [
+      "cursor-pointer select-none rounded-lg border border-transparent px-3 py-1.5 text-xs font-extrabold",
+      "text-zinc-700 hover:bg-zinc-200/40 dark:text-zinc-200 dark:hover:bg-zinc-800/40",
+      active ? "border-indigo-500/30 bg-indigo-500/15" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
   return (
-    <details class="planStatement" open={index === 0}>
-      <summary class="planStatementSummary">
+    <details
+      class="overflow-hidden rounded-xl border border-zinc-200/70 bg-zinc-50/60 dark:border-zinc-800/60 dark:bg-zinc-900/20"
+      open={index === 0}
+    >
+      <summary class="flex cursor-pointer list-none items-baseline justify-between gap-3 px-3 py-2 text-xs font-extrabold text-zinc-800 dark:text-zinc-100 [&::-webkit-details-marker]:hidden">
         <span>Statement {index + 1}</span>
-        <span class="planStatementMeta">
+        <span class="inline-flex gap-3 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
           {planning !== undefined ? (
             <span>planning {fmtNum(planning)}ms</span>
           ) : null}
@@ -372,38 +412,35 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
           ) : null}
         </span>
       </summary>
-      <div class="planTree">
-        <div class="planViewTabsRoot">
-          <input
-            class="planViewTabInput"
-            type="radio"
-            name={tabName}
-            id={tabGraphId}
-            checked
-          />
-          <input
-            class="planViewTabInput"
-            type="radio"
-            name={tabName}
-            id={tabOutlineId}
-          />
-
-          <div class="planViewTabs">
-            <label class="planViewTab" for={tabGraphId}>
+      <div class="py-2">
+        <div class="mt-1">
+          <div class="mx-3 mb-3 inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">
+            <button
+              type="button"
+              class={tabClass(view === "graph")}
+              onClick={() => setView("graph")}
+            >
               Graph
-            </label>
-            <label class="planViewTab" for={tabOutlineId}>
+            </button>
+            <button
+              type="button"
+              class={tabClass(view === "outline")}
+              onClick={() => setView("outline")}
+            >
               Outline
-            </label>
+            </button>
           </div>
 
-          <div class="planViewPanels">
-            <section class="planViewPanel" id={`planViewPanelGraph_${index}`}>
-              <PlanGraph root={tree.root} />
-            </section>
-            <section class="planViewPanel" id={`planViewPanelOutline_${index}`}>
-              <PlanNodeView node={tree.root} />
-            </section>
+          <div class="m-0">
+            {view === "graph" ? (
+              <section>
+                <PlanGraph root={tree.root} />
+              </section>
+            ) : (
+              <section>
+                <PlanNodeView node={tree.root} />
+              </section>
+            )}
           </div>
         </div>
       </div>
@@ -413,16 +450,22 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
 
 export const PlanResult: FC<Props> = ({ result, error }) => {
   if (!result) {
-    return <div class="meta">{error ?? "Plan is not available"}</div>;
+    return (
+      <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+        {error ?? "Plan is not available"}
+      </div>
+    );
   }
 
   return (
     <>
-      <div class="planRoot">
+      <div class="mt-3 grid gap-3">
         {result.statements?.length ? (
           result.statements.map((t, i) => <StatementView tree={t} index={i} />)
         ) : (
-          <div class="meta">{error ?? "No plan statements"}</div>
+          <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+            {error ?? "No plan statements"}
+          </div>
         )}
       </div>
     </>
