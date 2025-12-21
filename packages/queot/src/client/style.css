@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    @apply m-0 bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100;
+    @apply font-sans;
+  }
+
+  .planSection {
+    @apply mt-5 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/60;
+  }
+  .planHeader {
+    @apply items-center;
+  }
+  .planModeBadge {
+    @apply rounded-full border border-indigo-500/30 bg-indigo-500/15 px-3 py-1 text-xs font-extrabold;
+  }
+}
