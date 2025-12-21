@@ -42,7 +42,9 @@ function nodeTitle(node: PlanNode): string {
   return node.nodeType ?? "Unknown";
 }
 
-function nodeSubTitle(node: PlanNode): string | undefined {
+type KV = { k: string; v: string };
+
+function nodeIdentityPairs(node: PlanNode): KV[] {
   const raw = node.raw as unknown as Record<string, unknown>;
   const relation = pickStr(raw, "Relation Name");
   const index = pickStr(raw, "Index Name");
@@ -50,59 +52,12 @@ function nodeSubTitle(node: PlanNode): string | undefined {
   const joinType = pickStr(raw, "Join Type");
   const scanDir = pickStr(raw, "Scan Direction");
 
-  const parts = [
-    relation ? `rel: ${relation}` : undefined,
-    index ? `idx: ${index}` : undefined,
-    alias && alias !== relation ? `as: ${alias}` : undefined,
-    joinType ? `join: ${joinType}` : undefined,
-    scanDir ? `dir: ${scanDir}` : undefined,
-  ].filter(Boolean) as string[];
-
-  return parts.length ? parts.join(" · ") : undefined;
-}
-
-function truncate(s: string, max = 40): string {
-  if (s.length <= max) return s;
-  return `${s.slice(0, Math.max(0, max - 1))}…`;
-}
-
-function nodeMetrics(node: PlanNode): string[] {
-  const raw = node.raw as unknown as Record<string, unknown>;
-  const startupCost = pickNum(raw, "Startup Cost");
-  const totalCost = pickNum(raw, "Total Cost");
-  const planRows = pickNum(raw, "Plan Rows");
-
-  const actualStart = pickNum(raw, "Actual Startup Time");
-  const actualTotal = pickNum(raw, "Actual Total Time");
-  const actualRows = pickNum(raw, "Actual Rows");
-  const loops = pickNum(raw, "Actual Loops");
-
-  const out: string[] = [];
-  if (
-    startupCost !== undefined ||
-    totalCost !== undefined ||
-    planRows !== undefined
-  ) {
-    out.push(
-      `plan: cost ${startupCost !== undefined ? fmtNum(startupCost, 2) : "?"}..${
-        totalCost !== undefined ? fmtNum(totalCost, 2) : "?"
-      } rows ${planRows !== undefined ? fmtNum(planRows, 0) : "?"}`,
-    );
-  }
-  if (
-    actualStart !== undefined ||
-    actualTotal !== undefined ||
-    actualRows !== undefined ||
-    loops !== undefined
-  ) {
-    out.push(
-      `actual: time ${actualStart !== undefined ? fmtNum(actualStart) : "?"}..${
-        actualTotal !== undefined ? fmtNum(actualTotal) : "?"
-      } rows ${actualRows !== undefined ? fmtNum(actualRows, 0) : "?"} loops ${
-        loops !== undefined ? fmtNum(loops, 0) : "?"
-      }`,
-    );
-  }
+  const out: KV[] = [];
+  if (relation) out.push({ k: "rel", v: relation });
+  if (index) out.push({ k: "idx", v: index });
+  if (alias && alias !== relation) out.push({ k: "as", v: alias });
+  if (joinType) out.push({ k: "join", v: joinType });
+  if (scanDir) out.push({ k: "dir", v: scanDir });
   return out;
 }
 
@@ -131,13 +86,103 @@ function nodeConditions(
   return out;
 }
 
+function nodePlainTextLine(node: PlanNode): string {
+  const raw = node.raw as unknown as Record<string, unknown>;
+  const title = nodeTitle(node);
+
+  const startupCost = pickNum(raw, "Startup Cost");
+  const totalCost = pickNum(raw, "Total Cost");
+  const planRows = pickNum(raw, "Plan Rows");
+
+  const actualStart = pickNum(raw, "Actual Startup Time");
+  const actualTotal = pickNum(raw, "Actual Total Time");
+  const actualRows = pickNum(raw, "Actual Rows");
+  const loops = pickNum(raw, "Actual Loops");
+
+  const relation = pickStr(raw, "Relation Name");
+  const index = pickStr(raw, "Index Name");
+  const alias = pickStr(raw, "Alias");
+  const joinType = pickStr(raw, "Join Type");
+  const scanDir = pickStr(raw, "Scan Direction");
+
+  const parts: string[] = [];
+  if (
+    startupCost !== undefined ||
+    totalCost !== undefined ||
+    planRows !== undefined
+  ) {
+    parts.push(
+      `cost=${startupCost !== undefined ? fmtNum(startupCost, 2) : "?"}..${
+        totalCost !== undefined ? fmtNum(totalCost, 2) : "?"
+      }`,
+    );
+    parts.push(`rows=${planRows !== undefined ? fmtNum(planRows, 0) : "?"}`);
+  }
+
+  if (
+    actualStart !== undefined ||
+    actualTotal !== undefined ||
+    actualRows !== undefined ||
+    loops !== undefined
+  ) {
+    parts.push(
+      `actual time=${
+        actualStart !== undefined ? fmtNum(actualStart) : "?"
+      }..${actualTotal !== undefined ? fmtNum(actualTotal) : "?"}`,
+    );
+    parts.push(
+      `actual rows=${actualRows !== undefined ? fmtNum(actualRows, 0) : "?"}`,
+    );
+    parts.push(`loops=${loops !== undefined ? fmtNum(loops, 0) : "?"}`);
+  }
+
+  if (joinType) parts.push(`join=${joinType}`);
+  if (relation) parts.push(`rel=${relation}`);
+  if (index) parts.push(`idx=${index}`);
+  if (alias && alias !== relation) parts.push(`as=${alias}`);
+  if (scanDir) parts.push(`dir=${scanDir}`);
+
+  return parts.length ? `${title}  (${parts.join(" ")})` : title;
+}
+
+function renderPlanPlainText(root: PlanNode): string {
+  const lines: string[] = [];
+  const walk = (node: PlanNode) => {
+    const prefix =
+      node.depth === 0 ? "" : `${"  ".repeat(Math.max(0, node.depth - 1))}-> `;
+    lines.push(`${prefix}${nodePlainTextLine(node)}`);
+
+    // 追加情報（Filter等）は Postgres の EXPLAIN テキスト出力風に次行へ
+    const conds = nodeConditions(node);
+    for (const c of conds) {
+      lines.push(`${"  ".repeat(node.depth)}   ${c.label}: ${c.value}`);
+    }
+
+    for (const child of node.children) walk(child);
+  };
+  walk(root);
+  return lines.join("\n");
+}
+
+function scrollExecutionPlanToTop(): void {
+  const el = document.getElementById("execution-plan");
+  if (!el) return;
+  requestAnimationFrame(() => {
+    el.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
+}
+
 type GraphNode = {
   id: string;
   x: number;
   y: number;
+  w: number;
+  h: number;
   title: string;
-  subtitle?: string;
+  left: KV[];
+  right: KV[];
   rawTitle: string;
+  kind: "scan" | "join" | "sort" | "aggregate" | "cte" | "other";
 };
 
 type GraphEdge = {
@@ -145,72 +190,197 @@ type GraphEdge = {
   toId: string;
 };
 
+function nodeKind(node: PlanNode): GraphNode["kind"] {
+  const t = (node.nodeType ?? "").toLowerCase();
+  if (t.includes("join")) return "join";
+  if (t.includes("scan") || t.includes("seek")) return "scan";
+  if (t.includes("sort")) return "sort";
+  if (t.includes("aggregate") || t.includes("group")) return "aggregate";
+  if (t.includes("cte") || t.includes("subquery") || t.includes("initplan"))
+    return "cte";
+  return "other";
+}
+
+function nodeMetricPairs(node: PlanNode): KV[] {
+  const raw = node.raw as unknown as Record<string, unknown>;
+  const startupCost = pickNum(raw, "Startup Cost");
+  const totalCost = pickNum(raw, "Total Cost");
+  const planRows = pickNum(raw, "Plan Rows");
+
+  const actualStart = pickNum(raw, "Actual Startup Time");
+  const actualTotal = pickNum(raw, "Actual Total Time");
+  const actualRows = pickNum(raw, "Actual Rows");
+  const loops = pickNum(raw, "Actual Loops");
+
+  if (startupCost !== undefined || totalCost !== undefined) {
+    // ok
+  }
+  if (actualStart !== undefined || actualTotal !== undefined) {
+    // ok
+  }
+  const out: KV[] = [];
+  if (startupCost !== undefined || totalCost !== undefined) {
+    out.push({
+      k: "cost",
+      v: `${startupCost !== undefined ? fmtNum(startupCost, 2) : "?"}..${
+        totalCost !== undefined ? fmtNum(totalCost, 2) : "?"
+      }`,
+    });
+  }
+  if (planRows !== undefined || actualRows !== undefined) {
+    const plan = planRows !== undefined ? fmtNum(planRows, 0) : "?";
+    const actual =
+      actualRows !== undefined ? ` (actual ${fmtNum(actualRows, 0)})` : "";
+    out.push({ k: "rows", v: `${plan}${actual}` });
+  }
+  if (actualStart !== undefined || actualTotal !== undefined) {
+    out.push({
+      k: "actual",
+      v: `${actualStart !== undefined ? fmtNum(actualStart) : "?"}..${
+        actualTotal !== undefined ? fmtNum(actualTotal) : "?"
+      }ms`,
+    });
+  }
+  if (loops !== undefined) out.push({ k: "loops", v: fmtNum(loops, 0) });
+  return out;
+}
+
+function buildNodeMap(root: PlanNode): Map<string, PlanNode> {
+  const m = new Map<string, PlanNode>();
+  const walk = (n: PlanNode) => {
+    m.set(n.id, n);
+    for (const c of n.children) walk(c);
+  };
+  walk(root);
+  return m;
+}
+
+function pickRowsForViz(node: PlanNode): number | undefined {
+  const raw = node.raw as unknown as Record<string, unknown>;
+  const actualRows = pickNum(raw, "Actual Rows");
+  const planRows = pickNum(raw, "Plan Rows");
+  return actualRows ?? planRows;
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, v));
+}
+
+function edgeStrokeWidth(rows: number | undefined, maxRows: number): number {
+  const MIN_W = 1.5;
+  const MAX_W = 7.5;
+  if (!rows || rows <= 0 || !Number.isFinite(rows) || maxRows <= 0)
+    return MIN_W;
+  // ログスケール: rows の桁差が大きくても視認性を保つ
+  const t = Math.log10(rows + 1) / Math.log10(maxRows + 1);
+  return clamp(MIN_W + t * (MAX_W - MIN_W), MIN_W, MAX_W);
+}
+
+function estimateNodeWidthPx(title: string, left: KV[], right: KV[]): number {
+  // DOM計測なしの概算（フォントサイズ10〜12px前提）
+  // NOTE: 右カラムは monospace で数字が長くなりがちなので少し強めに見積もる
+  const charPx = 7.8;
+  const pad = 12 * 2 + 6 + 18; // px-3 + left bar + 余裕（やや多め）
+  const colGap = 12; // gap-x-3
+  const leftMax =
+    left.length > 0 ? Math.max(...left.map((p) => `${p.k} ${p.v}`.length)) : 0;
+  const rightMax =
+    right.length > 0
+      ? Math.max(...right.map((p) => `${p.k} ${p.v}`.length))
+      : 0;
+  const titleW = title.length * (charPx + 0.6);
+  // 2カラムは右側が長くなりやすいので右を少し重めに扱う
+  const colsW = leftMax * charPx + colGap + rightMax * (charPx * 1.15);
+  return clamp(Math.ceil(pad + Math.max(titleW, colsW)), 320, 1200);
+}
+
 function layoutPlanTree(root: PlanNode) {
-  // シンプルなツリー・レイアウト:
-  // - 葉の数を「幅」として扱い、子の幅の合計で親の幅を決める
-  // - x は子の範囲の中央、y は depth に応じて等間隔
-  const NODE_W = 180;
-  const NODE_H = 44;
-  const GAP_X = 26;
+  // 可変幅ツリー・レイアウト（ピクセルベース）:
+  // - subtreeWidthPx = max(selfWidthPx, sum(childSubtreeWidthPx)+gaps)
+  // - 親は自分のsubtreeの中央に置く
+  const NODE_H = 132;
+  const GAP_X = 32;
   const GAP_Y = 30;
   const PAD_X = 16;
   const PAD_Y = 16;
 
-  const widthCache = new Map<string, number>();
+  const widthCache = new Map<string, number>(); // subtree width px
+  const nodeWCache = new Map<string, number>(); // node width px
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
-  const subtreeUnits = (n: PlanNode): number => {
-    const cached = widthCache.get(n.id);
-    if (cached !== undefined) return cached;
-    const u =
-      n.children.length === 0
-        ? 1
-        : n.children.reduce((acc, c) => acc + subtreeUnits(c), 0);
-    widthCache.set(n.id, u);
-    return u;
-  };
-
-  const unitToX = (unit: number) => PAD_X + unit * (NODE_W + GAP_X);
   const depthToY = (depth: number) => PAD_Y + depth * (NODE_H + GAP_Y);
 
-  const visit = (n: PlanNode, leftUnit: number) => {
-    const units = subtreeUnits(n);
-    const myCenterUnit = leftUnit + units / 2 - 0.5;
-    const x = unitToX(myCenterUnit);
+  const nodeWidthPx = (n: PlanNode): number => {
+    const cached = nodeWCache.get(n.id);
+    if (cached !== undefined) return cached;
+    const title = nodeTitle(n);
+    const left = nodeIdentityPairs(n);
+    const right = nodeMetricPairs(n);
+    const w = estimateNodeWidthPx(title, left, right);
+    nodeWCache.set(n.id, w);
+    return w;
+  };
+
+  const subtreeWidthPx = (n: PlanNode): number => {
+    const cached = widthCache.get(n.id);
+    if (cached !== undefined) return cached;
+    const selfW = nodeWidthPx(n);
+    const childWs = n.children.map((c) => subtreeWidthPx(c));
+    const childrenTotal =
+      childWs.length === 0
+        ? 0
+        : childWs.reduce((a, b) => a + b, 0) + GAP_X * (childWs.length - 1);
+    const w = Math.max(selfW, childrenTotal);
+    widthCache.set(n.id, w);
+    return w;
+  };
+
+  const visit = (n: PlanNode, leftPx: number) => {
+    const subW = subtreeWidthPx(n);
+    const selfW = nodeWidthPx(n);
+    const x = leftPx + (subW - selfW) / 2;
     const y = depthToY(n.depth);
 
     const title = nodeTitle(n);
-    const subtitle = nodeSubTitle(n);
-    const rawTitle = [title, subtitle].filter(Boolean).join(" — ");
+    const left = nodeIdentityPairs(n);
+    const right = nodeMetricPairs(n);
+    const rawTitle = [
+      title,
+      ...left.map((p) => `${p.k}: ${p.v}`),
+      ...right.map((p) => `${p.k}: ${p.v}`),
+    ].join(" — ");
 
     nodes.push({
       id: n.id,
       x,
       y,
-      title: truncate(title, 28),
-      subtitle: subtitle ? truncate(subtitle, 46) : undefined,
+      w: selfW,
+      h: NODE_H,
+      title,
+      left,
+      right,
       rawTitle,
+      kind: nodeKind(n),
     });
 
-    let cursor = leftUnit;
+    let cursor = leftPx;
     for (const c of n.children) {
       edges.push({ fromId: n.id, toId: c.id });
-      const cu = subtreeUnits(c);
+      const cw = subtreeWidthPx(c);
       visit(c, cursor);
-      cursor += cu;
+      cursor += cw + GAP_X;
     }
   };
 
-  visit(root, 0);
+  visit(root, PAD_X);
 
   const maxDepth = nodes.reduce(
     (m, n) => Math.max(m, Math.round((n.y - PAD_Y) / (NODE_H + GAP_Y))),
     0,
   );
-  const totalUnits = subtreeUnits(root);
 
-  const width = PAD_X * 2 + totalUnits * (NODE_W + GAP_X) - GAP_X;
+  const width = PAD_X + subtreeWidthPx(root) + PAD_X;
   const height = PAD_Y * 2 + (maxDepth + 1) * (NODE_H + GAP_Y) - GAP_Y;
 
   const nodeById = new Map(nodes.map((n) => [n.id, n]));
@@ -220,164 +390,238 @@ function layoutPlanTree(root: PlanNode) {
     nodeById,
     width,
     height,
-    constants: { NODE_W, NODE_H },
+    constants: { NODE_H, GAP_X, GAP_Y, PAD_X, PAD_Y },
   };
 }
 
 const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
+  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+  const byId = buildNodeMap(root);
+  const selected = selectedId ? byId.get(selectedId) : undefined;
+
   const g = layoutPlanTree(root);
+  const maxRows = (() => {
+    let m = 0;
+    for (const n of byId.values()) {
+      const r = pickRowsForViz(n);
+      if (r !== undefined && Number.isFinite(r)) m = Math.max(m, r);
+    }
+    return m;
+  })();
+
+  const kindAccent = (k: GraphNode["kind"]) => {
+    switch (k) {
+      case "join":
+        return "bg-violet-500/70";
+      case "scan":
+        return "bg-sky-500/70";
+      case "sort":
+        return "bg-amber-500/70";
+      case "aggregate":
+        return "bg-emerald-500/70";
+      case "cte":
+        return "bg-indigo-500/70";
+      default:
+        return "bg-zinc-500/60";
+    }
+  };
 
   return (
-    <div class="mx-3 overflow-auto rounded-xl border border-zinc-200/60 bg-white/50 dark:border-zinc-800/60 dark:bg-zinc-950/20">
-      <svg
-        class="block"
-        width="100%"
-        height={Math.max(240, g.height)}
-        viewBox={`0 0 ${g.width} ${g.height}`}
-        role="img"
-        aria-label="Execution plan graph"
-      >
-        <defs>
-          <linearGradient id="planNodeFill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stop-color="rgba(127,127,127,0.10)" />
-            <stop offset="100%" stop-color="rgba(127,127,127,0.06)" />
-          </linearGradient>
-        </defs>
+    <div class="mx-3 overflow-hidden rounded-xl border border-zinc-200/60 bg-white/50 dark:border-zinc-800/60 dark:bg-zinc-950/20">
+      <div class="flex items-center justify-between gap-2 border-b border-zinc-200/50 px-3 py-2 dark:border-zinc-800/50">
+        <span class="text-xs font-extrabold text-zinc-700 dark:text-zinc-200">
+          Graph
+        </span>
+        <span class="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+          edge width: rows
+        </span>
+      </div>
 
-        {/* edges */}
-        {g.edges.map((e) => {
-          const from = g.nodeById.get(e.fromId);
-          const to = g.nodeById.get(e.toId);
-          if (!from || !to) return null;
-          const x1 = from.x + g.constants.NODE_W / 2;
-          const y1 = from.y + g.constants.NODE_H;
-          const x2 = to.x + g.constants.NODE_W / 2;
-          const y2 = to.y;
-          const midY = (y1 + y2) / 2;
-          const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
-          return (
-            <path d={d} class="fill-none stroke-zinc-500/40" stroke-width="2" />
-          );
-        })}
+      <div class="overflow-auto">
+        <div
+          class="relative"
+          style={`width:${g.width}px;height:${Math.max(240, g.height)}px`}
+          role="img"
+          aria-label="Execution plan graph"
+        >
+          {/* grid background */}
+          <div
+            class="pointer-events-none absolute inset-0 opacity-60 dark:opacity-40"
+            style={[
+              "background-image: linear-gradient(to right, rgba(120,120,120,0.10) 1px, transparent 1px),",
+              "linear-gradient(to bottom, rgba(120,120,120,0.10) 1px, transparent 1px);",
+              "background-size: 20px 20px;",
+            ].join("")}
+          />
 
-        {/* nodes */}
-        {g.nodes.map((n) => {
-          const x = n.x;
-          const y = n.y;
-          return (
-            <g>
-              <title>{n.rawTitle}</title>
-              <rect
-                x={x}
-                y={y}
-                width={g.constants.NODE_W}
-                height={g.constants.NODE_H}
-                rx="10"
-                fill="url(#planNodeFill)"
-                class="stroke-zinc-500/40"
-                stroke-width="1"
-              />
-              <text
-                x={x + 12}
-                y={y + 18}
-                class="fill-zinc-800 text-[12px] font-extrabold dark:fill-zinc-100"
+          {/* edges (orthogonal) */}
+          {g.edges.map((e) => {
+            const from = g.nodeById.get(e.fromId);
+            const to = g.nodeById.get(e.toId);
+            if (!from || !to) return null;
+
+            const x1 = from.x + from.w / 2;
+            const y1 = from.y + from.h;
+            const x2 = to.x + to.w / 2;
+            const y2 = to.y;
+            const midY = (y1 + y2) / 2;
+
+            const toPlan = byId.get(e.toId);
+            const rows = toPlan ? pickRowsForViz(toPlan) : undefined;
+            const w = edgeStrokeWidth(rows, maxRows);
+
+            const v1H = Math.max(0, midY - y1);
+            const v2H = Math.max(0, y2 - midY);
+            const hW = Math.abs(x2 - x1);
+            const hL = Math.min(x1, x2);
+
+            return (
+              <div class="pointer-events-none">
+                <div
+                  class="absolute rounded-full bg-zinc-500/35"
+                  style={`left:${x1 - w / 2}px;top:${y1}px;width:${w}px;height:${v1H}px`}
+                />
+                <div
+                  class="absolute rounded-full bg-zinc-500/35"
+                  style={`left:${hL}px;top:${midY - w / 2}px;width:${hW}px;height:${w}px`}
+                />
+                <div
+                  class="absolute rounded-full bg-zinc-500/35"
+                  style={`left:${x2 - w / 2}px;top:${midY}px;width:${w}px;height:${v2H}px`}
+                />
+              </div>
+            );
+          })}
+
+          {/* nodes */}
+          {g.nodes.map((n) => {
+            const x = n.x;
+            const y = n.y;
+            const active = n.id === selectedId;
+            return (
+              <div
+                class={[
+                  "absolute cursor-pointer overflow-hidden rounded-xl border bg-white/60 shadow-sm",
+                  "dark:bg-zinc-950/20",
+                  active
+                    ? "border-indigo-500/60 ring-2 ring-indigo-500/20"
+                    : "border-zinc-200/70 dark:border-zinc-800/60",
+                ].join(" ")}
+                style={`left:${x}px;top:${y}px;width:${n.w}px;height:${n.h}px`}
+                title={n.rawTitle}
+                onClick={() =>
+                  setSelectedId((prev) => (prev === n.id ? undefined : n.id))
+                }
               >
-                {n.title}
-              </text>
-              {n.subtitle ? (
-                <text
-                  x={x + 12}
-                  y={y + 34}
-                  class="fill-zinc-500 text-[10.5px] font-bold dark:fill-zinc-400"
-                >
-                  {n.subtitle}
-                </text>
-              ) : null}
-            </g>
-          );
-        })}
-      </svg>
+                <div
+                  class={[
+                    "absolute left-0 top-0 h-full w-[6px]",
+                    kindAccent(n.kind),
+                  ].join(" ")}
+                />
+                <div class="flex h-full flex-col gap-1 px-3 py-2">
+                  <div class="whitespace-normal break-words text-[12px] font-extrabold leading-snug text-zinc-800 dark:text-zinc-100">
+                    {n.title}
+                  </div>
+                  <div class="mt-0.5 grid grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)] gap-x-3 gap-y-1 text-[10.5px] leading-snug">
+                    <div class="grid content-start gap-1">
+                      {n.left.map((p) => (
+                        <div class="min-w-0 break-words">
+                          <span class="mr-1 font-extrabold text-zinc-500 dark:text-zinc-400">
+                            {p.k}
+                          </span>
+                          <span class="font-mono font-semibold text-zinc-700 dark:text-zinc-200">
+                            {p.v}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div class="grid content-start gap-1">
+                      {n.right.map((p) => (
+                        <div class="min-w-0 overflow-x-auto whitespace-nowrap">
+                          <span class="mr-1 font-extrabold text-zinc-500 dark:text-zinc-400">
+                            {p.k}
+                          </span>
+                          <span class="font-mono font-semibold text-zinc-700 dark:text-zinc-200">
+                            {p.v}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div class="border-t border-zinc-200/50 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800/50 dark:text-zinc-400">
         ヒント:
-        横に長い場合はスクロールできます。ノードにマウスオーバーで詳細表示。
+        横/縦に大きい場合はスクロールできます。ノードクリックで詳細表示。
       </div>
+
+      {selected ? (
+        <div class="border-t border-zinc-200/50 px-3 py-3 dark:border-zinc-800/50">
+          <div class="text-xs font-extrabold text-zinc-800 dark:text-zinc-100">
+            {nodePlainTextLine(selected)}
+          </div>
+          <div class="mt-2 grid gap-1.5">
+            {nodeConditions(selected).length ? (
+              <div class="rounded-xl border border-zinc-200/60 bg-white/60 px-3 py-2 dark:border-zinc-800/60 dark:bg-zinc-950/20">
+                <div class="text-[11px] font-extrabold text-zinc-700 dark:text-zinc-200">
+                  Conditions
+                </div>
+                <div class="mt-1 grid gap-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                  {nodeConditions(selected).map((c) => (
+                    <div class="font-mono">
+                      <span class="font-sans font-bold text-zinc-700 dark:text-zinc-200">
+                        {c.label}
+                      </span>
+                      : {c.value}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <details class="rounded-xl border border-zinc-200/60 bg-white/60 px-3 py-2 dark:border-zinc-800/60 dark:bg-zinc-950/20">
+              <summary class="cursor-pointer select-none text-[11px] font-extrabold text-zinc-700 dark:text-zinc-200 [&::-webkit-details-marker]:hidden">
+                Raw JSON
+              </summary>
+              <pre class="m-0 mt-2 max-h-[320px] overflow-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-zinc-800 dark:text-zinc-100">
+                {JSON.stringify(selected.raw, null, 2)}
+              </pre>
+            </details>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };
 
-const PlanNodeView: FC<{ node: PlanNode }> = ({ node }) => {
-  const title = nodeTitle(node);
-  const subtitle = nodeSubTitle(node);
-  const metrics = nodeMetrics(node);
-  const conditions = nodeConditions(node);
-
-  // 深い階層は畳んでおく（SSRでも扱いやすい）
-  const openByDefault = node.depth <= 1;
-
+const PlanText: FC<{ root: PlanNode }> = ({ root }) => {
+  const text = renderPlanPlainText(root);
   return (
-    <details
-      class="border-t border-zinc-200/50 dark:border-zinc-800/50 first:border-t-0"
-      open={openByDefault}
-    >
-      <summary
-        class="flex cursor-pointer list-none items-baseline justify-between gap-3 px-3 py-2 [&::-webkit-details-marker]:hidden"
-        style={`padding-left:${node.depth * 16}px`}
-      >
-        <span class="inline-flex flex-wrap items-baseline gap-2">
-          <span class="text-xs font-extrabold text-zinc-800 dark:text-zinc-100">
-            {title}
-          </span>
-          {subtitle ? (
-            <span class="text-[11px] text-zinc-500 dark:text-zinc-400">
-              {subtitle}
-            </span>
-          ) : null}
+    <div class="mx-3 overflow-hidden rounded-xl border border-zinc-200/60 bg-white/60 dark:border-zinc-800/60 dark:bg-zinc-950/20">
+      <div class="flex items-center justify-between gap-2 border-b border-zinc-200/50 px-3 py-2 dark:border-zinc-800/50">
+        <span class="text-xs font-extrabold text-zinc-700 dark:text-zinc-200">
+          Plain text
         </span>
-      </summary>
-
-      <div
-        class="grid gap-2 px-3 pb-3"
-        style={`padding-left:${node.depth * 16}px`}
-      >
-        {metrics.length ? (
-          <div class="grid gap-1 text-[11px] text-zinc-600 dark:text-zinc-300">
-            {metrics.map((m) => (
-              <div class="font-mono">{m}</div>
-            ))}
-          </div>
-        ) : null}
-
-        {conditions.length ? (
-          <div class="grid gap-2">
-            {conditions.map((c) => (
-              <div class="grid gap-1">
-                <span class="text-[11px] font-extrabold text-zinc-500 dark:text-zinc-400">
-                  {c.label}
-                </span>
-                <code class="whitespace-pre-wrap text-[11px]">{c.value}</code>
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {node.children.length ? (
-          <div class="grid">
-            {node.children.map((c) => (
-              <PlanNodeView node={c} />
-            ))}
-          </div>
-        ) : null}
-
-        <details class="mt-1 overflow-hidden rounded-xl border border-dashed border-zinc-300/60 bg-zinc-100/40 dark:border-zinc-700/60 dark:bg-zinc-900/20">
-          <summary class="cursor-pointer list-none px-3 py-1.5 text-[11px] font-extrabold text-zinc-600 dark:text-zinc-300 [&::-webkit-details-marker]:hidden">
-            raw
-          </summary>
-          <pre class="m-0 max-h-60 overflow-auto px-3 py-2 text-[11px]">
-            {JSON.stringify(node.raw, null, 2)}
-          </pre>
-        </details>
+        <button
+          type="button"
+          class="rounded-lg border border-zinc-300/70 bg-white px-2 py-1 text-[11px] font-bold text-zinc-700 hover:bg-zinc-50 active:bg-zinc-100 dark:border-zinc-700/70 dark:bg-zinc-900/40 dark:text-zinc-200 dark:hover:bg-zinc-800/50"
+          onClick={() => {
+            // eslint-disable-next-line @typescript-eslint/no-floating-promises
+            navigator.clipboard?.writeText(text);
+          }}
+        >
+          Copy
+        </button>
       </div>
-    </details>
+      <pre class="m-0 max-h-[540px] overflow-auto whitespace-pre px-3 py-3 font-mono text-[12.5px] leading-relaxed text-zinc-800 dark:text-zinc-100">
+        {text}
+      </pre>
+    </div>
   );
 };
 
@@ -387,7 +631,7 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
 }) => {
   const planning = tree.meta.planningTimeMs;
   const execution = tree.meta.executionTimeMs;
-  const [view, setView] = useState<"graph" | "outline">("graph");
+  const [view, setView] = useState<"graph" | "text">("text");
   const tabClass = (active: boolean) =>
     [
       "cursor-pointer select-none rounded-lg border border-transparent px-3 py-1.5 text-xs font-extrabold",
@@ -402,7 +646,6 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
       open={index === 0}
     >
       <summary class="flex cursor-pointer list-none items-baseline justify-between gap-3 px-3 py-2 text-xs font-extrabold text-zinc-800 dark:text-zinc-100 [&::-webkit-details-marker]:hidden">
-        <span>Statement {index + 1}</span>
         <span class="inline-flex gap-3 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
           {planning !== undefined ? (
             <span>planning {fmtNum(planning)}ms</span>
@@ -418,16 +661,22 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
             <button
               type="button"
               class={tabClass(view === "graph")}
-              onClick={() => setView("graph")}
+              onClick={() => {
+                setView("graph");
+                scrollExecutionPlanToTop();
+              }}
             >
               Graph
             </button>
             <button
               type="button"
-              class={tabClass(view === "outline")}
-              onClick={() => setView("outline")}
+              class={tabClass(view === "text")}
+              onClick={() => {
+                setView("text");
+                scrollExecutionPlanToTop();
+              }}
             >
-              Outline
+              Text
             </button>
           </div>
 
@@ -438,7 +687,7 @@ const StatementView: FC<{ tree: PlanTree; index: number }> = ({
               </section>
             ) : (
               <section>
-                <PlanNodeView node={tree.root} />
+                <PlanText root={tree.root} />
               </section>
             )}
           </div>
