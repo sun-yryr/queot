@@ -123,28 +123,19 @@ export const DiffView: FC<Props> = ({ diff, hasBothResults, emptyMessage }) => {
         <div class="disclosureBody diffLegendBody">
           <div class="diffLegendGrid">
             <div class="diffLegendItem">
-              <span
-                class="diffLegendSwatch"
-                style="background: rgba(34, 197, 94, 0.18)"
-              />
+              <span class="diffLegendSwatch bg-emerald-500/20" />
               <span class="diffLegendText">
                 <b>追加</b>（行: <code>+++</code>）
               </span>
             </div>
             <div class="diffLegendItem">
-              <span
-                class="diffLegendSwatch"
-                style="background: rgba(239, 68, 68, 0.18)"
-              />
+              <span class="diffLegendSwatch bg-red-500/20" />
               <span class="diffLegendText">
                 <b>削除</b>（行: <code>---</code>）
               </span>
             </div>
             <div class="diffLegendItem">
-              <span
-                class="diffLegendSwatch"
-                style="background: rgba(234, 179, 8, 0.14)"
-              />
+              <span class="diffLegendSwatch bg-amber-400/20" />
               <span class="diffLegendText">
                 <b>変更</b>（行: <code>-&gt;</code> / セル内:{" "}
                 <code>a-&gt;b</code>）

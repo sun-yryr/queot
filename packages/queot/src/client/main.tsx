@@ -1,5 +1,5 @@
 import { render } from "hono/jsx/dom";
-import { App } from "./App.js";
+import { App } from "./App.jsx";
 
 const root = document.getElementById("root");
 if (!root) {
