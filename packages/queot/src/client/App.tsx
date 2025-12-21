@@ -1,4 +1,4 @@
-import { useState } from "hono/jsx/dom";
+import { useEffect, useRef, useState } from "hono/jsx/dom";
 import { DiffView } from "./components/DiffView.jsx";
 import { QueryResultTable } from "./components/QueryResultTable.jsx";
 import { PlanResult } from "./components/PlanResult.jsx";
@@ -44,6 +44,59 @@ export function App() {
   );
   const hasAnyError = Boolean(errorA || errorB || planErrorA || planErrorB);
 
+  // タブ切り替えで上下位置がズレないよう、各タブ内容の最大高さをコンテナに与える
+  const resultDiffRef = useRef<HTMLDivElement>(null);
+  const resultARef = useRef<HTMLDivElement>(null);
+  const resultBRef = useRef<HTMLDivElement>(null);
+  const [resultMinHeight, setResultMinHeight] = useState<number>(0);
+
+  const planARef = useRef<HTMLDivElement>(null);
+  const planBRef = useRef<HTMLDivElement>(null);
+  const [planMinHeight, setPlanMinHeight] = useState<number>(0);
+
+  const tabPanelClass = (active: boolean) =>
+    active
+      ? "relative"
+      : "pointer-events-none absolute left-0 top-0 w-full opacity-0";
+
+  useEffect(() => {
+    const els = [
+      resultDiffRef.current,
+      resultARef.current,
+      resultBRef.current,
+    ].filter(Boolean) as HTMLDivElement[];
+    if (!els.length) return;
+
+    const calc = () => {
+      const h = Math.max(...els.map((el) => el.getBoundingClientRect().height));
+      if (Number.isFinite(h)) setResultMinHeight(Math.ceil(h));
+    };
+    calc();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => calc());
+    for (const el of els) ro.observe(el);
+    return () => ro.disconnect();
+  }, [diff, resultA, resultB, errorA, errorB]);
+
+  useEffect(() => {
+    const els = [planARef.current, planBRef.current].filter(
+      Boolean,
+    ) as HTMLDivElement[];
+    if (!els.length) return;
+
+    const calc = () => {
+      const h = Math.max(...els.map((el) => el.getBoundingClientRect().height));
+      if (Number.isFinite(h)) setPlanMinHeight(Math.ceil(h));
+    };
+    calc();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => calc());
+    for (const el of els) ro.observe(el);
+    return () => ro.disconnect();
+  }, [planResultA, planResultB, planErrorA, planErrorB, planMode]);
+
   const tabClass = (active: boolean) =>
     [
       "cursor-pointer select-none rounded-lg border border-transparent px-3 py-1.5 text-xs font-bold",
@@ -52,6 +105,15 @@ export function App() {
     ]
       .filter(Boolean)
       .join(" ");
+
+  function scrollExecutionPlanToTop(): void {
+    const el = document.getElementById("execution-plan");
+    if (!el) return;
+    // state更新で高さが変わるケースもあるので、次フレームでスクロール
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ block: "start", behavior: "smooth" });
+    });
+  }
 
   async function run(): Promise<void> {
     setLoading(true);
@@ -253,35 +315,50 @@ export function App() {
                   </button>
                 </div>
 
-                <div class="mt-3">
-                  {resultTab === "diff" ? (
-                    <section>
-                      <DiffView
-                        diff={diff}
-                        hasBothResults={Boolean(resultA && resultB)}
-                      />
-                    </section>
-                  ) : resultTab === "a" ? (
-                    <section>
-                      <QueryResultTable
-                        result={resultA}
-                        error={errorA}
-                        emptyMessage="Query Aは未実行/空です。"
-                      />
-                    </section>
-                  ) : (
-                    <section>
-                      <QueryResultTable
-                        result={resultB}
-                        error={errorB}
-                        emptyMessage="Query Bは未実行/空です。"
-                      />
-                    </section>
-                  )}
+                <div
+                  class="relative mt-3"
+                  style={
+                    resultMinHeight > 0
+                      ? `min-height:${resultMinHeight}px`
+                      : undefined
+                  }
+                >
+                  <section
+                    ref={resultDiffRef}
+                    class={tabPanelClass(resultTab === "diff")}
+                  >
+                    <DiffView
+                      diff={diff}
+                      hasBothResults={Boolean(resultA && resultB)}
+                    />
+                  </section>
+                  <section
+                    ref={resultARef}
+                    class={tabPanelClass(resultTab === "a")}
+                  >
+                    <QueryResultTable
+                      result={resultA}
+                      error={errorA}
+                      emptyMessage="Query Aは未実行/空です。"
+                    />
+                  </section>
+                  <section
+                    ref={resultBRef}
+                    class={tabPanelClass(resultTab === "b")}
+                  >
+                    <QueryResultTable
+                      result={resultB}
+                      error={errorB}
+                      emptyMessage="Query Bは未実行/空です。"
+                    />
+                  </section>
                 </div>
               </div>
 
-              <section class="mt-5 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/60">
+              <section
+                id="execution-plan"
+                class="mt-5 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/60"
+              >
                 <div class="flex items-baseline justify-between gap-3">
                   <div>
                     <h3 class="m-0 text-sm font-bold text-zinc-700 dark:text-zinc-200">
@@ -303,39 +380,55 @@ export function App() {
                     <button
                       type="button"
                       class={tabClass(planTab === "a")}
-                      onClick={() => setPlanTab("a")}
+                      onClick={() => {
+                        setPlanTab("a");
+                        scrollExecutionPlanToTop();
+                      }}
                     >
                       Plan A
                     </button>
                     <button
                       type="button"
                       class={tabClass(planTab === "b")}
-                      onClick={() => setPlanTab("b")}
+                      onClick={() => {
+                        setPlanTab("b");
+                        scrollExecutionPlanToTop();
+                      }}
                     >
                       Plan B
                     </button>
                   </div>
 
-                  <div class="mt-3">
-                    {planTab === "a" ? (
-                      <section>
-                        <PlanResult
-                          result={planResultA}
-                          error={
-                            planErrorA ?? "Query Aの実行計画は未実行/空です。"
-                          }
-                        />
-                      </section>
-                    ) : (
-                      <section>
-                        <PlanResult
-                          result={planResultB}
-                          error={
-                            planErrorB ?? "Query Bの実行計画は未実行/空です。"
-                          }
-                        />
-                      </section>
-                    )}
+                  <div
+                    class="relative mt-3"
+                    style={
+                      planMinHeight > 0
+                        ? `min-height:${planMinHeight}px`
+                        : undefined
+                    }
+                  >
+                    <section
+                      ref={planARef}
+                      class={tabPanelClass(planTab === "a")}
+                    >
+                      <PlanResult
+                        result={planResultA}
+                        error={
+                          planErrorA ?? "Query Aの実行計画は未実行/空です。"
+                        }
+                      />
+                    </section>
+                    <section
+                      ref={planBRef}
+                      class={tabPanelClass(planTab === "b")}
+                    >
+                      <PlanResult
+                        result={planResultB}
+                        error={
+                          planErrorB ?? "Query Bの実行計画は未実行/空です。"
+                        }
+                      />
+                    </section>
                   </div>
                 </div>
               </section>
