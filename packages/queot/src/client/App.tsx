@@ -1,55 +1,96 @@
-import type { FC } from "hono/jsx";
+import { useState } from "hono/jsx/dom";
+import { DiffView } from "./components/DiffView.js";
+import { QueryResultTable } from "./components/QueryResultTable.js";
+import { PlanResult } from "./components/PlanResult.js";
+import type { RunResponse } from "../routes/api.js";
 import type { QueryResult } from "../services/query.js";
 import type { DiffSheet } from "../services/diff.js";
-import { DiffView } from "./components/DiffView.jsx";
-import { QueryResultTable } from "./components/QueryResultTable.jsx";
-import { PlanResult } from "./components/PlanResult.jsx";
 import type { ExplainParseResult } from "@sun-yryr/queot-planparser";
 
 type PlanMode = "explain" | "analyze";
+type ResultTab = "diff" | "a" | "b";
+type PlanTab = "a" | "b";
 
-type Props = {
-  queryA?: string;
-  queryB?: string;
-  resultA?: QueryResult;
-  resultB?: QueryResult;
-  errorA?: string;
-  errorB?: string;
-  diff?: DiffSheet;
-  planMode?: PlanMode;
-  planResultA?: ExplainParseResult;
-  planResultB?: ExplainParseResult;
-  planErrorA?: string;
-  planErrorB?: string;
-  planDiff?: DiffSheet;
-};
-
-export const Index: FC<Props> = ({
-  queryA,
-  queryB,
-  resultA,
-  resultB,
-  errorA,
-  errorB,
-  diff,
-  planMode,
-  planResultA,
-  planResultB,
-  planErrorA,
-  planErrorB,
-}) => {
-  const defaultQuery = `select
+const DEFAULT_QUERY = `select
   1 as one,
   now() as now`;
-  const currentQueryA =
-    (queryA ?? "").trim().length > 0 ? queryA! : defaultQuery;
-  const currentQueryB = (queryB ?? "").trim().length > 0 ? queryB! : "";
-  const currentPlanMode: PlanMode = planMode ?? "explain";
+
+export function App() {
+  const [queryA, setQueryA] = useState(DEFAULT_QUERY);
+  const [queryB, setQueryB] = useState("");
+  const [planMode, setPlanMode] = useState<PlanMode>("explain");
+
+  const [loading, setLoading] = useState(false);
+  const [resultTab, setResultTab] = useState<ResultTab>("diff");
+  const [planTab, setPlanTab] = useState<PlanTab>("a");
+
+  const [resultA, setResultA] = useState<QueryResult | undefined>(undefined);
+  const [resultB, setResultB] = useState<QueryResult | undefined>(undefined);
+  const [errorA, setErrorA] = useState<string | undefined>(undefined);
+  const [errorB, setErrorB] = useState<string | undefined>(undefined);
+  const [diff, setDiff] = useState<DiffSheet | undefined>(undefined);
+
+  const [planResultA, setPlanResultA] = useState<
+    ExplainParseResult | undefined
+  >(undefined);
+  const [planResultB, setPlanResultB] = useState<
+    ExplainParseResult | undefined
+  >(undefined);
+  const [planErrorA, setPlanErrorA] = useState<string | undefined>(undefined);
+  const [planErrorB, setPlanErrorB] = useState<string | undefined>(undefined);
 
   const hasAnyResult = Boolean(
     resultA || resultB || planResultA || planResultB,
   );
   const hasAnyError = Boolean(errorA || errorB || planErrorA || planErrorB);
+
+  async function run(): Promise<void> {
+    setLoading(true);
+    try {
+      const resp = await fetch("/api/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          queryA,
+          queryB,
+          planMode,
+        }),
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(`HTTP ${resp.status}${text ? `: ${text}` : ""}`);
+      }
+
+      const data = (await resp.json()) as RunResponse;
+      setResultA(data.resultA);
+      setResultB(data.resultB);
+      setErrorA(data.errorA);
+      setErrorB(data.errorB);
+      setDiff(data.diff);
+
+      setPlanResultA(data.planResultA);
+      setPlanResultB(data.planResultB);
+      setPlanErrorA(data.planErrorA);
+      setPlanErrorB(data.planErrorB);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setErrorA(msg);
+      setErrorB(undefined);
+      setPlanErrorA(undefined);
+      setPlanErrorB(undefined);
+      setResultA(undefined);
+      setResultB(undefined);
+      setDiff(undefined);
+      setPlanResultA(undefined);
+      setPlanResultB(undefined);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div class="container">
@@ -57,7 +98,7 @@ export const Index: FC<Props> = ({
         <div>
           <h1 class="title">queot — Query Console</h1>
           <p class="subtitle">
-            フォームでSQLを送信し、結果をサーバ側でレンダリングして表示します。
+            フォームでSQLを送信し、JSON API（/api/run）経由で結果を表示します。
           </p>
         </div>
       </header>
@@ -70,7 +111,12 @@ export const Index: FC<Props> = ({
               <span class="disclosureHint">（クリックで開閉）</span>
             </summary>
             <div class="disclosureBody">
-              <form method="post" action="/">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run();
+                }}
+              >
                 <div class="sqlGrid">
                   <div class="sqlCol">
                     <div class="sqlLabelRow">
@@ -78,13 +124,16 @@ export const Index: FC<Props> = ({
                     </div>
                     <textarea
                       id="sqlA"
-                      name="queryA"
                       class="textarea"
                       spellcheck={false}
                       rows={10}
-                    >
-                      {currentQueryA}
-                    </textarea>
+                      value={queryA}
+                      onInput={(e) =>
+                        setQueryA(
+                          (e.currentTarget as HTMLTextAreaElement).value,
+                        )
+                      }
+                    />
                   </div>
 
                   <div class="sqlCol">
@@ -93,13 +142,16 @@ export const Index: FC<Props> = ({
                     </div>
                     <textarea
                       id="sqlB"
-                      name="queryB"
                       class="textarea"
                       spellcheck={false}
                       rows={10}
-                    >
-                      {currentQueryB}
-                    </textarea>
+                      value={queryB}
+                      onInput={(e) =>
+                        setQueryB(
+                          (e.currentTarget as HTMLTextAreaElement).value,
+                        )
+                      }
+                    />
                   </div>
                 </div>
 
@@ -116,7 +168,8 @@ export const Index: FC<Props> = ({
                         type="radio"
                         name="planMode"
                         value="explain"
-                        checked={currentPlanMode === "explain"}
+                        checked={planMode === "explain"}
+                        onChange={() => setPlanMode("explain")}
                       />
                       EXPLAIN
                     </label>
@@ -125,7 +178,8 @@ export const Index: FC<Props> = ({
                         type="radio"
                         name="planMode"
                         value="analyze"
-                        checked={currentPlanMode === "analyze"}
+                        checked={planMode === "analyze"}
+                        onChange={() => setPlanMode("analyze")}
                       />
                       EXPLAIN ANALYZE
                     </label>
@@ -133,8 +187,8 @@ export const Index: FC<Props> = ({
                 </div>
 
                 <div class="actions">
-                  <button type="submit" class="button">
-                    Run
+                  <button type="submit" class="button" disabled={loading}>
+                    {loading ? "Running..." : "Run"}
                   </button>
                 </div>
               </form>
@@ -155,19 +209,24 @@ export const Index: FC<Props> = ({
                   type="radio"
                   name="resultTab"
                   id="tabDiff"
-                  checked
+                  checked={resultTab === "diff"}
+                  onChange={() => setResultTab("diff")}
                 />
                 <input
                   class="tabInput"
                   type="radio"
                   name="resultTab"
                   id="tabA"
+                  checked={resultTab === "a"}
+                  onChange={() => setResultTab("a")}
                 />
                 <input
                   class="tabInput"
                   type="radio"
                   name="resultTab"
                   id="tabB"
+                  checked={resultTab === "b"}
+                  onChange={() => setResultTab("b")}
                 />
 
                 <div class="tabs">
@@ -213,15 +272,13 @@ export const Index: FC<Props> = ({
                   <div>
                     <h3 class="h3">Execution Plan</h3>
                     <div class="hint">
-                      {currentPlanMode === "analyze"
+                      {planMode === "analyze"
                         ? "EXPLAIN ANALYZE を付与して実行計画を取得しています。"
                         : "EXPLAIN を付与して実行計画を取得しています。"}
                     </div>
                   </div>
                   <div class="planModeBadge">
-                    {currentPlanMode === "analyze"
-                      ? "EXPLAIN ANALYZE"
-                      : "EXPLAIN"}
+                    {planMode === "analyze" ? "EXPLAIN ANALYZE" : "EXPLAIN"}
                   </div>
                 </div>
 
@@ -231,13 +288,16 @@ export const Index: FC<Props> = ({
                     type="radio"
                     name="planTab"
                     id="planTabA"
-                    checked
+                    checked={planTab === "a"}
+                    onChange={() => setPlanTab("a")}
                   />
                   <input
                     class="tabInput"
                     type="radio"
                     name="planTab"
                     id="planTabB"
+                    checked={planTab === "b"}
+                    onChange={() => setPlanTab("b")}
                   />
 
                   <div class="tabs">
@@ -403,4 +463,4 @@ export const Index: FC<Props> = ({
       `}</style>
     </div>
   );
-};
+}

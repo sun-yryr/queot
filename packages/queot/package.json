@@ -5,8 +5,13 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "./bin/dev.js",
-    "build": "tsc",
+    "dev": "pnpm -s dev:web & pnpm -s dev:api",
+    "dev:web": "vite --open",
+    "dev:api": "OCLIF_DEBUG=1 ./bin/dev.js serve -p 3000",
+    "build:server": "tsc --project tsconfig.build.json",
+    "build:client": "vite build",
+    "build": "pnpm build:server && pnpm build:client",
+    "start": "NODE_ENV=production node ./bin/run.js serve -p 3000",
     "check": "pnpm \"/^check:.*/\"",
     "check:prettier": "prettier . --check",
     "check:eslint": "eslint",
@@ -39,7 +44,8 @@
     "prettier": "catalog:",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "catalog:"
+    "typescript-eslint": "catalog:",
+    "vite": "^7.3.0"
   },
   "bin": {
     "queot": "./bin/run.js"

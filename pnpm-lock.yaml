@@ -139,6 +139,9 @@ importers:
       typescript-eslint:
         specifier: 'catalog:'
         version: 8.49.0(eslint@9.39.2)(typescript@5.9.3)
+      vite:
+        specifier: ^7.3.0
+        version: 7.3.0(@types/node@24.10.3)(tsx@4.21.0)
 
 packages:
 
