@@ -44,6 +44,55 @@ function nodeTitle(node: PlanNode): string {
 
 type KV = { k: string; v: string };
 
+type NodeCategory =
+  | "scan"
+  | "join"
+  | "limit"
+  | "sort"
+  | "unique"
+  | "aggregate"
+  | "cte"
+  | "other";
+
+function nodeCategory(node: PlanNode): NodeCategory {
+  const t = (node.nodeType ?? "").toLowerCase();
+  if (t.includes("limit")) return "limit";
+  if (t.includes("unique")) return "unique";
+  if (t.includes("sort")) return "sort";
+  if (t.includes("aggregate") || t.includes("group")) return "aggregate";
+  if (t.includes("join")) return "join";
+  if (t.includes("scan") || t.includes("seek")) return "scan";
+  if (t.includes("cte") || t.includes("subquery") || t.includes("initplan"))
+    return "cte";
+  return "other";
+}
+
+const templateForCategory: Record<
+  NodeCategory,
+  { leftKeys: string[]; rightKeys: string[] }
+> = {
+  scan: {
+    leftKeys: ["rel", "idx", "as", "dir"],
+    rightKeys: ["rows", "cost", "actual", "loops"],
+  },
+  join: {
+    leftKeys: ["join", "rel", "as"],
+    rightKeys: ["rows", "cost", "actual", "loops"],
+  },
+  limit: { leftKeys: [], rightKeys: ["rows", "cost", "actual", "loops"] },
+  sort: { leftKeys: [], rightKeys: ["rows", "cost", "actual", "loops"] },
+  unique: { leftKeys: [], rightKeys: ["rows", "cost", "actual", "loops"] },
+  aggregate: { leftKeys: [], rightKeys: ["rows", "cost", "actual", "loops"] },
+  cte: {
+    leftKeys: ["cte", "subplan", "rel", "as"],
+    rightKeys: ["rows", "cost", "actual", "loops"],
+  },
+  other: {
+    leftKeys: ["rel", "idx", "as", "join", "dir"],
+    rightKeys: ["rows", "cost", "actual", "loops"],
+  },
+};
+
 function nodeIdentityPairs(node: PlanNode): KV[] {
   const raw = node.raw as unknown as Record<string, unknown>;
   const relation = pickStr(raw, "Relation Name");
@@ -51,8 +100,12 @@ function nodeIdentityPairs(node: PlanNode): KV[] {
   const alias = pickStr(raw, "Alias");
   const joinType = pickStr(raw, "Join Type");
   const scanDir = pickStr(raw, "Scan Direction");
+  const cteName = pickStr(raw, "CTE Name");
+  const subplanName = pickStr(raw, "Subplan Name");
 
   const out: KV[] = [];
+  if (cteName) out.push({ k: "cte", v: cteName });
+  if (subplanName) out.push({ k: "subplan", v: subplanName });
   if (relation) out.push({ k: "rel", v: relation });
   if (index) out.push({ k: "idx", v: index });
   if (alias && alias !== relation) out.push({ k: "as", v: alias });
@@ -245,6 +298,57 @@ function nodeMetricPairs(node: PlanNode): KV[] {
   return out;
 }
 
+type NodeViewModel = {
+  title: string;
+  left: KV[];
+  right: KV[];
+  rawTitle: string;
+  kind: GraphNode["kind"];
+  category: NodeCategory;
+};
+
+function toMap(pairs: KV[]): Map<string, KV> {
+  const m = new Map<string, KV>();
+  for (const p of pairs) m.set(p.k, p);
+  return m;
+}
+
+function pickByKeys(pairs: KV[], keys: string[]): KV[] {
+  const m = toMap(pairs);
+  const out: KV[] = [];
+  for (const k of keys) {
+    const v = m.get(k);
+    if (v) out.push(v);
+  }
+  return out;
+}
+
+function buildNodeViewModel(node: PlanNode): NodeViewModel {
+  const title = nodeTitle(node);
+  const cat = nodeCategory(node);
+  const tpl = templateForCategory[cat];
+
+  const allLeft = nodeIdentityPairs(node);
+  const allRight = nodeMetricPairs(node);
+  const left = pickByKeys(allLeft, tpl.leftKeys);
+  const right = pickByKeys(allRight, tpl.rightKeys);
+
+  const rawTitle = [
+    title,
+    ...left.map((p) => `${p.k}: ${p.v}`),
+    ...right.map((p) => `${p.k}: ${p.v}`),
+  ].join(" — ");
+
+  return {
+    title,
+    left,
+    right,
+    rawTitle,
+    kind: nodeKind(node),
+    category: cat,
+  };
+}
+
 function buildNodeMap(root: PlanNode): Map<string, PlanNode> {
   const m = new Map<string, PlanNode>();
   const walk = (n: PlanNode) => {
@@ -306,6 +410,7 @@ function layoutPlanTree(root: PlanNode) {
 
   const widthCache = new Map<string, number>(); // subtree width px
   const nodeWCache = new Map<string, number>(); // node width px
+  const vmCache = new Map<string, NodeViewModel>();
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
@@ -314,10 +419,9 @@ function layoutPlanTree(root: PlanNode) {
   const nodeWidthPx = (n: PlanNode): number => {
     const cached = nodeWCache.get(n.id);
     if (cached !== undefined) return cached;
-    const title = nodeTitle(n);
-    const left = nodeIdentityPairs(n);
-    const right = nodeMetricPairs(n);
-    const w = estimateNodeWidthPx(title, left, right);
+    const vm = vmCache.get(n.id) ?? buildNodeViewModel(n);
+    vmCache.set(n.id, vm);
+    const w = estimateNodeWidthPx(vm.title, vm.left, vm.right);
     nodeWCache.set(n.id, w);
     return w;
   };
@@ -342,14 +446,8 @@ function layoutPlanTree(root: PlanNode) {
     const x = leftPx + (subW - selfW) / 2;
     const y = depthToY(n.depth);
 
-    const title = nodeTitle(n);
-    const left = nodeIdentityPairs(n);
-    const right = nodeMetricPairs(n);
-    const rawTitle = [
-      title,
-      ...left.map((p) => `${p.k}: ${p.v}`),
-      ...right.map((p) => `${p.k}: ${p.v}`),
-    ].join(" — ");
+    const vm = vmCache.get(n.id) ?? buildNodeViewModel(n);
+    vmCache.set(n.id, vm);
 
     nodes.push({
       id: n.id,
@@ -357,11 +455,11 @@ function layoutPlanTree(root: PlanNode) {
       y,
       w: selfW,
       h: NODE_H,
-      title,
-      left,
-      right,
-      rawTitle,
-      kind: nodeKind(n),
+      title: vm.title,
+      left: vm.left,
+      right: vm.right,
+      rawTitle: vm.rawTitle,
+      kind: vm.kind,
     });
 
     let cursor = leftPx;
