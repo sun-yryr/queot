@@ -27,11 +27,13 @@
     "@hono/node-server": "^1.19.7",
     "@oclif/core": "^4.8.0",
     "@sun-yryr/queot-planparser": "workspace:*",
+    "@tailwindcss/vite": "^4.1.18",
     "daff": "^1.4.2",
     "effect": "^3.19.12",
     "hono": "^4.10.8",
     "open": "^11.0.0",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "tailwindcss": "^4.1.18"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
