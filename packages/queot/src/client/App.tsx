@@ -15,6 +15,43 @@ const DEFAULT_QUERY = `select
   1 as one,
   now() as now`;
 
+function cellText(v: unknown): string {
+  if (v === null) return "null";
+  if (v === undefined) return "";
+  switch (typeof v) {
+    case "string":
+      return v;
+    case "number":
+    case "bigint":
+    case "boolean":
+      return String(v);
+    case "symbol":
+      return v.toString();
+    case "function":
+      return "[function]";
+    case "object": {
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return Object.prototype.toString.call(v);
+      }
+    }
+    default:
+      return "";
+  }
+}
+
+function diffHasChanges(diff: DiffSheet | undefined): boolean {
+  const rows = diff ?? [];
+  // DiffView と同じ判定: row差分だけでなく、カラム差分（"!" 行）も「差分あり」と扱う
+  return rows.some((row) => {
+    const marker = cellText(row?.[0]);
+    return (
+      marker === "!" || marker === "+++" || marker === "---" || marker === "->"
+    );
+  });
+}
+
 export function App() {
   const [queryA, setQueryA] = useState(DEFAULT_QUERY);
   const [queryB, setQueryB] = useState("");
@@ -23,6 +60,7 @@ export function App() {
   const [loading, setLoading] = useState(false);
   const [resultTab, setResultTab] = useState<ResultTab>("diff");
   const [planTab, setPlanTab] = useState<PlanTab>("a");
+  const [resultOpen, setResultOpen] = useState<boolean>(true);
 
   const [resultA, setResultA] = useState<QueryResult | undefined>(undefined);
   const [resultB, setResultB] = useState<QueryResult | undefined>(undefined);
@@ -39,10 +77,11 @@ export function App() {
   const [planErrorA, setPlanErrorA] = useState<string | undefined>(undefined);
   const [planErrorB, setPlanErrorB] = useState<string | undefined>(undefined);
 
-  const hasAnyResult = Boolean(
-    resultA || resultB || planResultA || planResultB,
+  const hasAnyQueryResultOrError = Boolean(resultA || resultB || errorA || errorB);
+  const hasAnyPlanOrError = Boolean(
+    planResultA || planResultB || planErrorA || planErrorB,
   );
-  const hasAnyError = Boolean(errorA || errorB || planErrorA || planErrorB);
+  const hasAnyResult = Boolean(hasAnyQueryResultOrError || hasAnyPlanOrError);
 
   // タブ切り替えで上下位置がズレないよう、各タブ内容の最大高さをコンテナに与える
   const resultDiffRef = useRef<HTMLDivElement>(null);
@@ -77,7 +116,7 @@ export function App() {
     const ro = new ResizeObserver(() => calc());
     for (const el of els) ro.observe(el);
     return () => ro.disconnect();
-  }, [diff, resultA, resultB, errorA, errorB]);
+  }, [diff, resultA, resultB, errorA, errorB, resultOpen]);
 
   useEffect(() => {
     const els = [planARef.current, planBRef.current].filter(
@@ -147,6 +186,16 @@ export function App() {
       setPlanResultB(data.planResultB);
       setPlanErrorA(data.planErrorA);
       setPlanErrorB(data.planErrorB);
+
+      // 初期表示: 差分がない（= 完全一致）なら Result を閉じる。
+      // ただし片側しか結果がない場合は Result を開いて見えるようにする。
+      const hasBoth = Boolean(data.resultA && data.resultB);
+      const openByDefault = hasBoth
+        ? data.diff
+          ? diffHasChanges(data.diff)
+          : true
+        : true;
+      setResultOpen(openByDefault);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setErrorA(msg);
@@ -158,6 +207,7 @@ export function App() {
       setDiff(undefined);
       setPlanResultA(undefined);
       setPlanResultB(undefined);
+      setResultOpen(true);
     } finally {
       setLoading(false);
     }
@@ -284,85 +334,132 @@ export function App() {
         <section class="rounded-xl border border-zinc-200/70 bg-zinc-50/60 p-4 dark:border-zinc-800/60 dark:bg-zinc-900/20">
           <div class="flex items-baseline justify-between gap-3">
             <h2 class="m-0 text-sm font-bold text-zinc-700 dark:text-zinc-200">
-              Result
+              出力
             </h2>
           </div>
 
-          {hasAnyResult || hasAnyError ? (
+          {hasAnyResult ? (
             <>
-              <div class="mt-3">
-                <div class="inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">
-                  <button
-                    type="button"
-                    class={tabClass(resultTab === "diff")}
-                    onClick={() => setResultTab("diff")}
-                  >
-                    Diff
-                  </button>
-                  <button
-                    type="button"
-                    class={tabClass(resultTab === "a")}
-                    onClick={() => setResultTab("a")}
-                  >
-                    Query A
-                  </button>
-                  <button
-                    type="button"
-                    class={tabClass(resultTab === "b")}
-                    onClick={() => setResultTab("b")}
-                  >
-                    Query B
-                  </button>
-                </div>
-
-                <div
-                  class="relative mt-3"
-                  style={
-                    resultMinHeight > 0
-                      ? `min-height:${resultMinHeight}px`
-                      : undefined
+              {hasAnyQueryResultOrError ? (
+                <details
+                  class="mt-3 overflow-hidden rounded-xl border border-zinc-200/70 bg-white/40 dark:border-zinc-800/60 dark:bg-zinc-950/10"
+                  open={resultOpen}
+                  onToggle={(e: Event) =>
+                    setResultOpen((e.currentTarget as HTMLDetailsElement).open)
                   }
                 >
-                  <section
-                    ref={resultDiffRef}
-                    class={tabPanelClass(resultTab === "diff")}
-                  >
-                    <DiffView
-                      diff={diff}
-                      hasBothResults={Boolean(resultA && resultB)}
-                    />
-                  </section>
-                  <section
-                    ref={resultARef}
-                    class={tabPanelClass(resultTab === "a")}
-                  >
-                    <QueryResultTable
-                      result={resultA}
-                      error={errorA}
-                      emptyMessage="Query Aは未実行/空です。"
-                    />
-                  </section>
-                  <section
-                    ref={resultBRef}
-                    class={tabPanelClass(resultTab === "b")}
-                  >
-                    <QueryResultTable
-                      result={resultB}
-                      error={errorB}
-                      emptyMessage="Query Bは未実行/空です。"
-                    />
-                  </section>
-                </div>
-              </div>
+                  <summary class="flex cursor-pointer list-none items-baseline justify-between gap-3 select-none px-3 py-2 [&::-webkit-details-marker]:hidden">
+                    <div class="flex flex-wrap items-baseline gap-2">
+                      <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">
+                        結果（Result）
+                      </span>
+                      {resultA && resultB ? (
+                        diff ? (
+                          diffHasChanges(diff) ? (
+                            <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-extrabold text-amber-700 dark:text-amber-200">
+                              差分あり
+                            </span>
+                          ) : (
+                            <span class="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-200">
+                              差分なし
+                            </span>
+                          )
+                        ) : (
+                          <span class="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-extrabold text-emerald-700 dark:text-emerald-200">
+                            Diff未取得
+                          </span>
+                        )
+                      ) : (
+                        <span class="rounded-full border border-zinc-400/30 bg-zinc-400/10 px-2 py-0.5 text-[11px] font-extrabold text-zinc-600 dark:text-zinc-300">
+                          片側のみ
+                        </span>
+                      )}
+                    </div>
+                    <span class="text-xs text-zinc-500 dark:text-zinc-400">
+                      （クリックで開閉）
+                    </span>
+                  </summary>
+
+                  <div class="border-t border-zinc-200/60 px-3 pb-3 dark:border-zinc-800/60">
+                    <div class="mt-3">
+                      <div class="inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">
+                        <button
+                          type="button"
+                          class={tabClass(resultTab === "diff")}
+                          onClick={() => setResultTab("diff")}
+                        >
+                          Diff
+                        </button>
+                        <button
+                          type="button"
+                          class={tabClass(resultTab === "a")}
+                          onClick={() => setResultTab("a")}
+                        >
+                          Query A
+                        </button>
+                        <button
+                          type="button"
+                          class={tabClass(resultTab === "b")}
+                          onClick={() => setResultTab("b")}
+                        >
+                          Query B
+                        </button>
+                      </div>
+
+                      <div
+                        class="relative mt-3"
+                        style={
+                          resultMinHeight > 0
+                            ? `min-height:${resultMinHeight}px`
+                            : undefined
+                        }
+                      >
+                        <section
+                          ref={resultDiffRef}
+                          class={tabPanelClass(resultTab === "diff")}
+                        >
+                          <DiffView
+                            diff={diff}
+                            hasBothResults={Boolean(resultA && resultB)}
+                          />
+                        </section>
+                        <section
+                          ref={resultARef}
+                          class={tabPanelClass(resultTab === "a")}
+                        >
+                          <QueryResultTable
+                            result={resultA}
+                            error={errorA}
+                            emptyMessage="Query Aは未実行/空です。"
+                          />
+                        </section>
+                        <section
+                          ref={resultBRef}
+                          class={tabPanelClass(resultTab === "b")}
+                        >
+                          <QueryResultTable
+                            result={resultB}
+                            error={errorB}
+                            emptyMessage="Query Bは未実行/空です。"
+                          />
+                        </section>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              ) : null}
 
               <section
                 id="execution-plan"
-                class="mt-5 border-t border-zinc-200/70 pt-4 dark:border-zinc-800/60"
+                class={[
+                  hasAnyQueryResultOrError ? "mt-5" : "mt-3",
+                  "rounded-xl border border-zinc-200/70 bg-white/40 p-3 dark:border-zinc-800/60 dark:bg-zinc-950/10",
+                ].join(" ")}
               >
                 <div class="flex items-baseline justify-between gap-3">
                   <div>
                     <h3 class="m-0 text-sm font-bold text-zinc-700 dark:text-zinc-200">
-                      Execution Plan
+                      実行計画（Execution Plan）
                     </h3>
                     <div class="text-xs text-zinc-500 dark:text-zinc-400">
                       {planMode === "analyze"

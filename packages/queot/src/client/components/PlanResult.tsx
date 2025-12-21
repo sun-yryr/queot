@@ -574,15 +574,6 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
 
   return (
     <div class="mx-3 overflow-hidden rounded-xl border border-zinc-200/60 bg-white/50 dark:border-zinc-800/60 dark:bg-zinc-950/20">
-      <div class="flex items-center justify-between gap-2 border-b border-zinc-200/50 px-3 py-2 dark:border-zinc-800/50">
-        <span class="text-xs font-extrabold text-zinc-700 dark:text-zinc-200">
-          Graph
-        </span>
-        <span class="text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
-          edge width: rows
-        </span>
-      </div>
-
       <div class="overflow-auto">
         <div
           class="relative"
@@ -670,8 +661,7 @@ const PlanGraph: FC<{ root: PlanNode }> = ({ root }) => {
       </div>
 
       <div class="border-t border-zinc-200/50 px-3 py-2 text-[11px] text-zinc-500 dark:border-zinc-800/50 dark:text-zinc-400">
-        ヒント:
-        横/縦に大きい場合はスクロールできます。ノードクリックで詳細表示。
+        edge width: rows / ヒント: 横/縦に大きい場合はスクロールできます。ノードクリックで詳細表示。
       </div>
 
       {selected ? (
@@ -738,78 +728,6 @@ const PlanText: FC<{ root: PlanNode }> = ({ root }) => {
   );
 };
 
-const StatementView: FC<{ tree: PlanTree; index: number }> = ({
-  tree,
-  index,
-}) => {
-  const planning = tree.meta.planningTimeMs;
-  const execution = tree.meta.executionTimeMs;
-  const [view, setView] = useState<"graph" | "text">("graph");
-  const tabClass = (active: boolean) =>
-    [
-      "cursor-pointer select-none rounded-lg border border-transparent px-3 py-1.5 text-xs font-extrabold",
-      "text-zinc-700 hover:bg-zinc-200/40 dark:text-zinc-200 dark:hover:bg-zinc-800/40",
-      active ? "border-indigo-500/30 bg-indigo-500/15" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-  return (
-    <details
-      class="overflow-hidden rounded-xl border border-zinc-200/70 bg-zinc-50/60 dark:border-zinc-800/60 dark:bg-zinc-900/20"
-      open={index === 0}
-    >
-      <summary class="flex cursor-pointer list-none items-baseline justify-between gap-3 px-3 py-2 text-xs font-extrabold text-zinc-800 dark:text-zinc-100 [&::-webkit-details-marker]:hidden">
-        <span class="inline-flex gap-3 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
-          {planning !== undefined ? (
-            <span>planning {fmtNum(planning)}ms</span>
-          ) : null}
-          {execution !== undefined ? (
-            <span>execution {fmtNum(execution)}ms</span>
-          ) : null}
-        </span>
-      </summary>
-      <div class="py-2">
-        <div class="mt-1">
-          <div class="mx-3 mb-3 inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">
-            <button
-              type="button"
-              class={tabClass(view === "graph")}
-              onClick={() => {
-                setView("graph");
-                scrollExecutionPlanToTop();
-              }}
-            >
-              Graph
-            </button>
-            <button
-              type="button"
-              class={tabClass(view === "text")}
-              onClick={() => {
-                setView("text");
-                scrollExecutionPlanToTop();
-              }}
-            >
-              Text
-            </button>
-          </div>
-
-          <div class="m-0">
-            {view === "graph" ? (
-              <section>
-                <PlanGraph root={tree.root} />
-              </section>
-            ) : (
-              <section>
-                <PlanText root={tree.root} />
-              </section>
-            )}
-          </div>
-        </div>
-      </div>
-    </details>
-  );
-};
-
 export const PlanResult: FC<Props> = ({ result, error }) => {
   if (!result) {
     return (
@@ -819,11 +737,109 @@ export const PlanResult: FC<Props> = ({ result, error }) => {
     );
   }
 
+  const statements = result.statements ?? [];
+  const [statementIndex, setStatementIndex] = useState(0);
+  const [view, setView] = useState<"graph" | "text">("graph");
+
+  useEffect(() => {
+    if (!statements.length) return;
+    if (statementIndex < 0 || statementIndex >= statements.length) {
+      setStatementIndex(0);
+    }
+  }, [statementIndex, statements.length]);
+
+  const tree: PlanTree | undefined =
+    statements.length > 0
+      ? statements[Math.min(statements.length - 1, Math.max(0, statementIndex))]
+      : undefined;
+
+  const planning = tree?.meta.planningTimeMs;
+  const execution = tree?.meta.executionTimeMs;
+
+  const tabClass = (active: boolean) =>
+    [
+      "cursor-pointer select-none rounded-lg border border-transparent px-3 py-1.5 text-xs font-extrabold",
+      "text-zinc-700 hover:bg-zinc-200/40 dark:text-zinc-200 dark:hover:bg-zinc-800/40",
+      active ? "border-indigo-500/30 bg-indigo-500/15" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
   return (
     <>
       <div class="mt-3 grid gap-3">
-        {result.statements?.length ? (
-          result.statements.map((t, i) => <StatementView tree={t} index={i} />)
+        {statements.length && tree ? (
+          <div class="overflow-hidden rounded-xl border border-zinc-200/70 bg-zinc-50/60 dark:border-zinc-800/60 dark:bg-zinc-900/20">
+            {/* toolbar */}
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200/50 px-3 py-2 dark:border-zinc-800/50">
+              <div class="flex flex-wrap items-center gap-2">
+                <label class="text-xs font-extrabold text-zinc-700 dark:text-zinc-200">
+                  Statement
+                </label>
+                <select
+                  class="rounded-lg border border-zinc-300/70 bg-white px-2 py-1 text-xs font-bold text-zinc-700 dark:border-zinc-700/70 dark:bg-zinc-900/40 dark:text-zinc-200"
+                  value={String(statementIndex)}
+                  disabled={statements.length <= 1}
+                  onChange={(e) => {
+                    const v = Number(
+                      (e.currentTarget as HTMLSelectElement).value,
+                    );
+                    setStatementIndex(Number.isFinite(v) ? v : 0);
+                    scrollExecutionPlanToTop();
+                  }}
+                >
+                  {statements.map((_, i) => (
+                    <option value={String(i)}>Statement {i + 1}</option>
+                  ))}
+                </select>
+
+                <div class="ml-2 inline-flex gap-3 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">
+                  {planning !== undefined ? (
+                    <span>planning {fmtNum(planning)}ms</span>
+                  ) : null}
+                  {execution !== undefined ? (
+                    <span>execution {fmtNum(execution)}ms</span>
+                  ) : null}
+                </div>
+              </div>
+
+              <div class="inline-flex gap-1 rounded-xl border border-zinc-300/70 bg-zinc-100/50 p-1 dark:border-zinc-700/70 dark:bg-zinc-900/40">
+                <button
+                  type="button"
+                  class={tabClass(view === "graph")}
+                  onClick={() => {
+                    setView("graph");
+                    scrollExecutionPlanToTop();
+                  }}
+                >
+                  Graph
+                </button>
+                <button
+                  type="button"
+                  class={tabClass(view === "text")}
+                  onClick={() => {
+                    setView("text");
+                    scrollExecutionPlanToTop();
+                  }}
+                >
+                  Text
+                </button>
+              </div>
+            </div>
+
+            {/* body */}
+            <div class="py-2">
+              {view === "graph" ? (
+                <section>
+                  <PlanGraph root={tree.root} />
+                </section>
+              ) : (
+                <section>
+                  <PlanText root={tree.root} />
+                </section>
+              )}
+            </div>
+          </div>
         ) : (
           <div class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
             {error ?? "No plan statements"}
