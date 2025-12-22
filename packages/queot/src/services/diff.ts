@@ -29,6 +29,17 @@ function cellTextForDiff(v: unknown): string {
   }
 }
 
+export function diffHasChanges(diff: DiffSheet | undefined): boolean {
+  const rows = diff ?? [];
+  // DiffView と同じ判定: row差分だけでなく、カラム差分（"!" 行）も「差分あり」と扱う
+  return rows.some((row) => {
+    const marker = cellTextForDiff(row?.[0]);
+    return (
+      marker === "!" || marker === "+++" || marker === "---" || marker === "->"
+    );
+  });
+}
+
 function resultToSheet(result: QueryResult): string[][] {
   const headers = result.fields.map((f) => f.name);
 

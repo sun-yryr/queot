@@ -5,11 +5,25 @@ import {
   Queryable,
   type QueryResult,
 } from "../services/query.js";
-import { createDiffSheet, type DiffSheet } from "../services/diff.js";
+import {
+  createDiffSheet,
+  diffHasChanges,
+  type DiffSheet,
+} from "../services/diff.js";
 import { parseExplainFromQueryResult } from "../services/plan.js";
 import type { ExplainParseResult } from "@sun-yryr/queot-planparser";
-
-type PlanMode = "explain" | "analyze";
+import type {
+  HistoryDetailResponse,
+  HistoriesResponse,
+  PlanMode,
+  RunResponse,
+} from "./types.js";
+import {
+  appendHistory,
+  newHistoryEntry,
+  readHistoryById,
+  readHistorySummaries,
+} from "../infra/history.js";
 
 type RunRequestBody = {
   queryA?: unknown;
@@ -20,28 +34,6 @@ type RunRequestBody = {
 type RunOneResult = {
   result?: QueryResult;
   error?: string;
-};
-
-export type RunResponse = {
-  queryA: string;
-  queryB: string;
-  planMode: PlanMode;
-
-  resultA?: QueryResult;
-  resultB?: QueryResult;
-  errorA?: string;
-  errorB?: string;
-
-  diff?: DiffSheet;
-
-  planQueryResultA?: QueryResult;
-  planQueryResultB?: QueryResult;
-  planResultA?: ExplainParseResult;
-  planResultB?: ExplainParseResult;
-  planErrorA?: string;
-  planErrorB?: string;
-
-  planDiff?: DiffSheet;
 };
 
 /**
@@ -93,10 +85,50 @@ function normalizePlanMode(v: unknown): PlanMode {
   return v === "analyze" ? "analyze" : "explain";
 }
 
+function computeHasDiffChanges(args: {
+  queryA: string;
+  queryB: string;
+  resultA?: QueryResult;
+  resultB?: QueryResult;
+  diff?: DiffSheet;
+}): boolean | undefined {
+  const hasBoth = Boolean(args.resultA && args.resultB);
+  if (hasBoth) return diffHasChanges(args.diff);
+
+  // 片側しか結果が無く diff が取れない場合は「差分あり（= 要確認）」扱いにする
+  const hasAnyQuery =
+    args.queryA.trim().length > 0 || args.queryB.trim().length > 0;
+  return hasAnyQuery ? true : undefined;
+}
+
 export function createApiRoute(deps: {
   queryable: Context.Tag.Service<typeof Queryable>;
 }) {
   const api = new Hono();
+
+  api.get("/histories", async (c) => {
+    const limitRaw = c.req.query("limit");
+    const id = c.req.query("id");
+    const timestamp = c.req.query("timestamp");
+    const limit = limitRaw ? Number(limitRaw) : undefined;
+
+    const items = await readHistorySummaries({
+      limit,
+      id,
+      timestamp,
+    });
+
+    const res: HistoriesResponse = { items };
+    return c.json(res);
+  });
+
+  api.get("/histories/:id", async (c) => {
+    const id = c.req.param("id");
+    const item = await readHistoryById(id);
+    if (!item)
+      return c.json({ item: undefined } satisfies HistoryDetailResponse, 404);
+    return c.json({ item } satisfies HistoryDetailResponse);
+  });
 
   api.post("/run", async (c) => {
     const body = (await c.req.json().catch(() => ({}))) as RunRequestBody;
@@ -151,6 +183,13 @@ export function createApiRoute(deps: {
       errorB: b.error,
 
       diff,
+      hasDiffChanges: computeHasDiffChanges({
+        queryA,
+        queryB,
+        resultA: a.result,
+        resultB: b.result,
+        diff,
+      }),
 
       planQueryResultA: aPlan.result,
       planQueryResultB: bPlan.result,
@@ -161,6 +200,20 @@ export function createApiRoute(deps: {
 
       planDiff: undefined,
     };
+
+    // 履歴は「失敗してもレスポンスを壊さない」方針で、best-effort で追記する
+    try {
+      await appendHistory(
+        newHistoryEntry({
+          queryA,
+          queryB,
+          planMode,
+          response: res,
+        }),
+      );
+    } catch {
+      // ignore
+    }
 
     return c.json(res);
   });

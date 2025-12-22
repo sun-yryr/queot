@@ -2,7 +2,12 @@ import { useEffect, useRef, useState } from "hono/jsx/dom";
 import { DiffView } from "./components/DiffView.jsx";
 import { QueryResultTable } from "./components/QueryResultTable.jsx";
 import { PlanResult } from "./components/PlanResult.jsx";
-import type { RunResponse } from "../routes/api.js";
+import { HistoryPanel } from "./components/HistoryPanel.jsx";
+import type {
+  HistoryDetailResponse,
+  HistoriesResponse,
+  RunResponse,
+} from "../routes/types.js";
 import type { QueryResult } from "../services/query.js";
 import type { DiffSheet } from "../services/diff.js";
 import type { ExplainParseResult } from "@sun-yryr/queot-planparser";
@@ -14,43 +19,6 @@ type PlanTab = "a" | "b";
 const DEFAULT_QUERY = `select
   1 as one,
   now() as now`;
-
-function cellText(v: unknown): string {
-  if (v === null) return "null";
-  if (v === undefined) return "";
-  switch (typeof v) {
-    case "string":
-      return v;
-    case "number":
-    case "bigint":
-    case "boolean":
-      return String(v);
-    case "symbol":
-      return v.toString();
-    case "function":
-      return "[function]";
-    case "object": {
-      try {
-        return JSON.stringify(v);
-      } catch {
-        return Object.prototype.toString.call(v);
-      }
-    }
-    default:
-      return "";
-  }
-}
-
-function diffHasChanges(diff: DiffSheet | undefined): boolean {
-  const rows = diff ?? [];
-  // DiffView と同じ判定: row差分だけでなく、カラム差分（"!" 行）も「差分あり」と扱う
-  return rows.some((row) => {
-    const marker = cellText(row?.[0]);
-    return (
-      marker === "!" || marker === "+++" || marker === "---" || marker === "->"
-    );
-  });
-}
 
 export function App() {
   const [queryA, setQueryA] = useState(DEFAULT_QUERY);
@@ -72,6 +40,9 @@ export function App() {
   const [errorA, setErrorA] = useState<string | undefined>(undefined);
   const [errorB, setErrorB] = useState<string | undefined>(undefined);
   const [diff, setDiff] = useState<DiffSheet | undefined>(undefined);
+  const [hasDiffChanges, setHasDiffChanges] = useState<boolean | undefined>(
+    undefined,
+  );
 
   const [planResultA, setPlanResultA] = useState<
     ExplainParseResult | undefined
@@ -81,6 +52,13 @@ export function App() {
   >(undefined);
   const [planErrorA, setPlanErrorA] = useState<string | undefined>(undefined);
   const [planErrorB, setPlanErrorB] = useState<string | undefined>(undefined);
+
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historiesLoading, setHistoriesLoading] = useState(false);
+  const [historiesError, setHistoriesError] = useState<string | undefined>(
+    undefined,
+  );
+  const [histories, setHistories] = useState<HistoriesResponse["items"]>([]);
 
   const hasAnyQueryResultOrError = Boolean(
     resultA || resultB || errorA || errorB,
@@ -161,6 +139,70 @@ export function App() {
     });
   }
 
+  function applyRunResponse(data: RunResponse): void {
+    setResultA(data.resultA);
+    setResultB(data.resultB);
+    setErrorA(data.errorA);
+    setErrorB(data.errorB);
+    setDiff(data.diff);
+    setHasDiffChanges(data.hasDiffChanges);
+    setPlanResultA(data.planResultA);
+    setPlanResultB(data.planResultB);
+    setPlanErrorA(data.planErrorA);
+    setPlanErrorB(data.planErrorB);
+    setPlanModeForResult(data.planMode);
+
+    // 初期表示: 差分がない（= 完全一致）なら Result を閉じる。
+    // ただし片側しか結果がない場合は Result を開いて見えるようにする。
+    const hasBoth = Boolean(data.resultA && data.resultB);
+    const openByDefault = hasBoth && data.hasDiffChanges !== false;
+    setResultOpen(openByDefault);
+  }
+
+  async function loadHistories(): Promise<void> {
+    setHistoriesLoading(true);
+    setHistoriesError(undefined);
+    try {
+      const resp = await fetch("/api/histories?limit=40", {
+        headers: { Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(`HTTP ${resp.status}${text ? `: ${text}` : ""}`);
+      }
+      const data = (await resp.json()) as HistoriesResponse;
+      setHistories(data.items ?? []);
+    } catch (e) {
+      setHistories([]);
+      setHistoriesError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHistoriesLoading(false);
+    }
+  }
+
+  async function selectHistory(id: string): Promise<void> {
+    try {
+      const resp = await fetch(`/api/histories/${encodeURIComponent(id)}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => "");
+        throw new Error(`HTTP ${resp.status}${text ? `: ${text}` : ""}`);
+      }
+      const data = (await resp.json()) as HistoryDetailResponse;
+      const item = data.item;
+      if (!item) throw new Error("履歴が見つかりませんでした。");
+
+      setQueryA(item.request.queryA);
+      setQueryB(item.request.queryB);
+      setPlanMode(item.request.planMode);
+      applyRunResponse(item.response);
+      setHistoryOpen(false);
+    } catch (e) {
+      setHistoriesError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
   async function run(): Promise<void> {
     setLoading(true);
     try {
@@ -183,27 +225,7 @@ export function App() {
       }
 
       const data = (await resp.json()) as RunResponse;
-      setResultA(data.resultA);
-      setResultB(data.resultB);
-      setErrorA(data.errorA);
-      setErrorB(data.errorB);
-      setDiff(data.diff);
-
-      setPlanResultA(data.planResultA);
-      setPlanResultB(data.planResultB);
-      setPlanErrorA(data.planErrorA);
-      setPlanErrorB(data.planErrorB);
-      setPlanModeForResult(data.planMode);
-
-      // 初期表示: 差分がない（= 完全一致）なら Result を閉じる。
-      // ただし片側しか結果がない場合は Result を開いて見えるようにする。
-      const hasBoth = Boolean(data.resultA && data.resultB);
-      const openByDefault = hasBoth
-        ? data.diff
-          ? diffHasChanges(data.diff)
-          : true
-        : true;
-      setResultOpen(openByDefault);
+      applyRunResponse(data);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setErrorA(msg);
@@ -230,6 +252,21 @@ export function App() {
           <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
             フォームでSQLを送信し、JSON API（/api/run）経由で結果を表示します。
           </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center justify-center rounded-xl border border-zinc-300/70 bg-white px-3 py-2 text-sm font-semibold shadow-sm hover:bg-zinc-50 active:bg-zinc-100 dark:border-zinc-700/70 dark:bg-zinc-900/40 dark:hover:bg-zinc-800/50"
+            onClick={() => {
+              setHistoryOpen((prev) => {
+                const next = !prev;
+                if (next) void loadHistories();
+                return next;
+              });
+            }}
+          >
+            履歴
+          </button>
         </div>
       </header>
 
@@ -364,7 +401,7 @@ export function App() {
                       </span>
                       {resultA && resultB ? (
                         diff ? (
-                          diffHasChanges(diff) ? (
+                          hasDiffChanges ? (
                             <span class="rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-extrabold text-amber-700 dark:text-amber-200">
                               差分あり
                             </span>
@@ -557,6 +594,16 @@ export function App() {
           )}
         </section>
       </main>
+
+      <HistoryPanel
+        open={historyOpen}
+        loading={historiesLoading}
+        error={historiesError}
+        items={histories}
+        onClose={() => setHistoryOpen(false)}
+        onReload={() => void loadHistories()}
+        onSelect={(id) => void selectHistory(id)}
+      />
     </div>
   );
 }
