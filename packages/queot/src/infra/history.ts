@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import os from "node:os";
 import { createReadStream } from "node:fs";
 import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { diffHasChanges } from "../services/diff.js";
+import { getResolvedHistoryConfig } from "./config.js";
 import type {
   HistoryEntry,
   HistorySummary,
@@ -12,13 +12,16 @@ import type {
   RunResponse,
 } from "../routes/types.js";
 
-export function getHistoryPath(): string {
-  const env = process.env.QUEOT_HISTORY_PATH;
-  if (env && env.trim().length > 0) return env;
+function getHistoryRetention(): { maxEntries: number; maxBytes: number } {
+  const cfg = getResolvedHistoryConfig();
+  // 大きくなりすぎた時だけ compact して「最新N件」を残す（通常時は append のみで高速）
+  const maxEntries = cfg.historyMaxEntries;
+  const maxBytes = cfg.historyMaxBytes;
+  return { maxEntries, maxBytes };
+}
 
-  const configHome =
-    process.env.XDG_CONFIG_HOME ?? path.join(os.homedir(), ".config");
-  return path.join(configHome, "queot", "history.jsonl");
+export function getHistoryPath(): string {
+  return getResolvedHistoryConfig().historyPath;
 }
 
 function clampInt(v: number, min: number, max: number): number {
@@ -74,10 +77,36 @@ export function newHistoryEntry(args: {
   };
 }
 
+async function trimHistoryIfNeeded(p: string): Promise<void> {
+  const { maxBytes, maxEntries } = getHistoryRetention();
+  const st = await fs.stat(p).catch(() => undefined);
+  if (!st) return;
+  if (st.size <= maxBytes) return;
+
+  // 最新maxEntries行だけ残す
+  const buf: string[] = [];
+  for await (const line of readLines(p)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    buf.push(trimmed);
+    if (buf.length > maxEntries) buf.shift();
+  }
+
+  const tmp = `${p}.tmp-${randomUUID()}`;
+  await fs.writeFile(tmp, `${buf.join("\n")}\n`, "utf8");
+  await fs.rename(tmp, p);
+}
+
 export async function appendHistory(entry: HistoryEntry): Promise<void> {
   const p = getHistoryPath();
   await fs.mkdir(path.dirname(p), { recursive: true });
   await fs.appendFile(p, `${JSON.stringify(entry)}\n`, "utf8");
+  // best-effort: 履歴肥大化時に古いものから削除（失敗しても本処理は壊さない）
+  try {
+    await trimHistoryIfNeeded(p);
+  } catch {
+    // ignore
+  }
 }
 
 async function* readLines(p: string): AsyncGenerator<string> {

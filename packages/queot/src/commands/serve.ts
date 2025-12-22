@@ -3,6 +3,7 @@ import { createApp } from "../server.js";
 import { serve } from "@hono/node-server";
 import { createPgClientFromEnv } from "../infra/postgres/client.js";
 import { makePgQueryable } from "../infra/postgres/queryable.js";
+import { initRuntimeEnv } from "../infra/config.js";
 import open from "open";
 
 export default class Serve extends Command {
@@ -20,6 +21,9 @@ export default class Serve extends Command {
   };
 
   public async run(): Promise<void> {
+    // env は起動時に1回だけ読む（各モジュールで process.env を参照しない）
+    initRuntimeEnv(process.env);
+
     const { flags } = await this.parse(Serve);
 
     const client = createPgClientFromEnv();
