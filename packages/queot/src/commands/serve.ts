@@ -1,4 +1,4 @@
-import { Args, Command, Flags, settings } from "@oclif/core";
+import { Command, Flags, settings } from "@oclif/core";
 import { createApp } from "../server.js";
 import { serve } from "@hono/node-server";
 import { createPgClientFromEnv } from "../infra/postgres/client.js";
@@ -7,9 +7,7 @@ import { initRuntimeEnv } from "../infra/config.js";
 import open from "open";
 
 export default class Serve extends Command {
-  static override args = {
-    file: Args.string({ description: "file to read" }),
-  };
+  static override args = {};
   static override description = "describe the command here";
   static override examples = ["<%= config.bin %> <%= command.id %>"];
   static override flags = {
