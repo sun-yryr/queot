@@ -26,6 +26,7 @@
   "packageManager": "pnpm@10.25.0",
   "dependencies": {
     "@hono/node-server": "^1.19.7",
+    "@inquirer/prompts": "^8.1.0",
     "@oclif/core": "^4.8.0",
     "@sun-yryr/queot-planparser": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",

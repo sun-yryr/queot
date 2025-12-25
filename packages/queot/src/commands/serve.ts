@@ -8,6 +8,7 @@ import { Client } from "pg";
 import { makePgQueryable } from "../infra/postgres/queryable.js";
 import { Queryable } from "../services/query.js";
 import open from "open";
+import { password } from "@inquirer/prompts";
 
 export default class Serve extends Command {
   static override args = {};
@@ -19,6 +20,30 @@ export default class Serve extends Command {
       description: "port to listen on",
       default: 3000,
     }),
+    dbHost: Flags.string({
+      char: "h",
+      aliases: ["host"],
+      description: "host to connect to Database",
+      default: "localhost",
+    }),
+    dbPort: Flags.integer({
+      char: "P",
+      aliases: ["port"],
+      description: "port to connect to Database",
+      default: 5432,
+    }),
+    dbUser: Flags.string({
+      char: "u",
+      aliases: ["user"],
+      description: "user to connect to Database",
+      default: "postgres",
+    }),
+    dbDatabase: Flags.string({
+      char: "d",
+      aliases: ["database"],
+      description: "database to connect to Database",
+      default: "postgres",
+    }),
   };
 
   public async run(): Promise<void> {
@@ -27,12 +52,20 @@ export default class Serve extends Command {
     // env は起動時に1回だけ読む（各モジュールで process.env を参照しない）
     const cfg = await loadRuntimeConfigFromEnv(process.env);
 
+    let dbPassword = process.env.DBPASSWORD;
+    if (!dbPassword) {
+      dbPassword = await password({
+        message: "password > ",
+        mask: true,
+      });
+    }
+
     const client = new Client({
-      host: cfg.pg.host,
-      port: cfg.pg.port,
-      user: cfg.pg.user,
-      password: cfg.pg.password,
-      database: cfg.pg.database,
+      host: flags.dbHost,
+      port: flags.dbPort,
+      user: flags.dbUser,
+      password: dbPassword,
+      database: flags.dbDatabase,
     });
     await client.connect();
 

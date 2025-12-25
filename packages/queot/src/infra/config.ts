@@ -14,17 +14,8 @@ export type ResolvedHistoryConfig = Required<
   Pick<QueotConfig, "historyPath" | "historyMaxEntries" | "historyMaxBytes">
 >;
 
-export type PgConfig = {
-  host: string;
-  port: number;
-  user: string;
-  password: string;
-  database: string;
-};
-
 export type RuntimeConfigService = {
   history: ResolvedHistoryConfig;
-  pg: PgConfig;
   nodeEnv?: string;
 };
 
@@ -129,25 +120,6 @@ function resolveHistoryConfig(
   };
 }
 
-function resolvePgConfig(env: Context.Tag.Service<typeof Env>): PgConfig {
-  const host = env.get("PGHOST") ?? "localhost";
-  const port = (() => {
-    const raw = env.get("PGPORT");
-    if (!raw) return 5432;
-    try {
-      return Schema.decodeUnknownSync(
-        Schema.NumberFromString.pipe(Schema.int()),
-      )(raw);
-    } catch {
-      return 5432;
-    }
-  })();
-  const user = env.get("PGUSER") ?? "postgres";
-  const password = env.get("PGPASSWORD") ?? "example";
-  const database = env.get("PGDATABASE") ?? "postgres";
-  return { host, port, user, password, database };
-}
-
 export const RuntimeConfigLive = Layer.effect(
   RuntimeConfig,
   Effect.gen(function* () {
@@ -155,7 +127,6 @@ export const RuntimeConfigLive = Layer.effect(
     const cfg = yield* loadQueotConfig(env);
     return {
       history: resolveHistoryConfig(env, cfg),
-      pg: resolvePgConfig(env),
       nodeEnv: env.get("NODE_ENV"),
     };
   }),
@@ -174,7 +145,6 @@ export async function loadRuntimeConfigFromEnv(
   const cfg = await Effect.runPromise(loadQueotConfig(envSvc));
   return {
     history: resolveHistoryConfig(envSvc, cfg),
-    pg: resolvePgConfig(envSvc),
     nodeEnv: envSvc.get("NODE_ENV"),
   };
 }
