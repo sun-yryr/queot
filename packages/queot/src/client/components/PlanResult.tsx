@@ -39,7 +39,7 @@ function pickNum(
 }
 
 function nodeTitle(node: PlanNode): string {
-  return node.nodeType ?? "Unknown";
+  return node["Node Type"] as string;
 }
 
 type KV = { k: string; v: string };
@@ -55,7 +55,7 @@ type NodeCategory =
   | "other";
 
 function nodeCategory(node: PlanNode): NodeCategory {
-  const t = (node.nodeType ?? "").toLowerCase();
+  const t = nodeTitle(node).toLowerCase();
   if (t.includes("limit")) return "limit";
   if (t.includes("unique")) return "unique";
   if (t.includes("sort")) return "sort";
@@ -244,7 +244,7 @@ type GraphEdge = {
 };
 
 function nodeKind(node: PlanNode): GraphNode["kind"] {
-  const t = (node.nodeType ?? "").toLowerCase();
+  const t = nodeTitle(node).toLowerCase();
   if (t.includes("join")) return "join";
   if (t.includes("scan") || t.includes("seek")) return "scan";
   if (t.includes("sort")) return "sort";
@@ -715,8 +715,7 @@ const PlanText: FC<{ root: PlanNode }> = ({ root }) => {
           type="button"
           class="rounded-lg border border-zinc-300/70 bg-white px-2 py-1 text-[11px] font-bold text-zinc-700 hover:bg-zinc-50 active:bg-zinc-100 dark:border-zinc-700/70 dark:bg-zinc-900/40 dark:text-zinc-200 dark:hover:bg-zinc-800/50"
           onClick={() => {
-            // eslint-disable-next-line @typescript-eslint/no-floating-promises
-            navigator.clipboard?.writeText(text);
+            void navigator.clipboard?.writeText(text);
           }}
         >
           Copy

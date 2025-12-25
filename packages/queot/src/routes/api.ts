@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { Effect, type Context } from "effect";
+import { Context, Effect, Schema } from "effect";
+import * as Either from "effect/Either";
 import {
   executeQuery,
   Queryable,
@@ -18,18 +19,8 @@ import type {
   PlanMode,
   RunResponse,
 } from "./types.js";
-import {
-  appendHistory,
-  newHistoryEntry,
-  readHistoryById,
-  readHistorySummaries,
-} from "../infra/history.js";
-
-type RunRequestBody = {
-  queryA?: unknown;
-  queryB?: unknown;
-  planMode?: unknown;
-};
+import { newHistoryEntry, HistoryStore } from "../infra/history.js";
+import { HistoriesQuerySchema, RunRequestSchema } from "./schemas.js";
 
 type RunOneResult = {
   result?: QueryResult;
@@ -81,10 +72,6 @@ function parsePlanSafe(planQueryResult?: QueryResult): {
   }
 }
 
-function normalizePlanMode(v: unknown): PlanMode {
-  return v === "analyze" ? "analyze" : "explain";
-}
-
 function computeHasDiffChanges(args: {
   queryA: string;
   queryB: string;
@@ -102,21 +89,26 @@ function computeHasDiffChanges(args: {
 }
 
 export function createApiRoute(deps: {
-  queryable: Context.Tag.Service<typeof Queryable>;
+  context: Context.Context<Queryable | HistoryStore>;
 }) {
   const api = new Hono();
 
   api.get("/histories", async (c) => {
-    const limitRaw = c.req.query("limit");
-    const id = c.req.query("id");
-    const timestamp = c.req.query("timestamp");
-    const limit = limitRaw ? Number(limitRaw) : undefined;
-
-    const items = await readHistorySummaries({
-      limit,
-      id,
-      timestamp,
+    const decoded = Schema.decodeUnknownEither(HistoriesQuerySchema)({
+      limit: c.req.query("limit"),
+      id: c.req.query("id"),
+      timestamp: c.req.query("timestamp"),
     });
+    if (Either.isLeft(decoded)) {
+      return c.json({ error: "BAD_REQUEST" }, 400);
+    }
+
+    const items = await Effect.runPromise(
+      Effect.gen(function* () {
+        const history = yield* HistoryStore;
+        return yield* history.readHistorySummaries(decoded.right);
+      }).pipe(Effect.provide(deps.context)),
+    );
 
     const res: HistoriesResponse = { items };
     return c.json(res);
@@ -124,17 +116,27 @@ export function createApiRoute(deps: {
 
   api.get("/histories/:id", async (c) => {
     const id = c.req.param("id");
-    const item = await readHistoryById(id);
+    const item = await Effect.runPromise(
+      Effect.gen(function* () {
+        const history = yield* HistoryStore;
+        return yield* history.readHistoryById(id);
+      }).pipe(Effect.provide(deps.context)),
+    );
     if (!item)
       return c.json({ item: undefined } satisfies HistoryDetailResponse, 404);
     return c.json({ item } satisfies HistoryDetailResponse);
   });
 
   api.post("/run", async (c) => {
-    const body = (await c.req.json().catch(() => ({}))) as RunRequestBody;
-    const queryA = typeof body?.queryA === "string" ? body.queryA : "";
-    const queryB = typeof body?.queryB === "string" ? body.queryB : "";
-    const planMode = normalizePlanMode(body?.planMode);
+    const rawBody = (await c.req.json().catch(() => ({}))) as unknown;
+    const decoded = Schema.decodeUnknownEither(RunRequestSchema)(rawBody);
+    if (Either.isLeft(decoded)) {
+      return c.json({ error: "BAD_REQUEST" }, 400);
+    }
+    const body = decoded.right;
+    const queryA = body.queryA ?? "";
+    const queryB = body.queryB ?? "";
+    const planMode: PlanMode = body.planMode ?? "explain";
 
     let planPrefix = "EXPLAIN (FORMAT JSON";
     if (planMode === "analyze") {
@@ -162,9 +164,11 @@ export function createApiRoute(deps: {
             .execute("ROLLBACK")
             .pipe(Effect.catchAll(() => Effect.void)),
       );
-    }).pipe(Effect.provideService(Queryable, deps.queryable));
+    });
 
-    const { a, aPlan, b, bPlan } = await Effect.runPromise(program);
+    const { a, aPlan, b, bPlan } = await Effect.runPromise(
+      program.pipe(Effect.provide(deps.context)),
+    );
 
     const diff =
       a.result && b.result ? createDiffSheet(a.result, b.result) : undefined;
@@ -203,13 +207,18 @@ export function createApiRoute(deps: {
 
     // 履歴は「失敗してもレスポンスを壊さない」方針で、best-effort で追記する
     try {
-      await appendHistory(
-        newHistoryEntry({
-          queryA,
-          queryB,
-          planMode,
-          response: res,
-        }),
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const history = yield* HistoryStore;
+          yield* history.appendHistory(
+            newHistoryEntry({
+              queryA,
+              queryB,
+              planMode,
+              response: res,
+            }),
+          );
+        }).pipe(Effect.provide(deps.context)),
       );
     } catch {
       // ignore

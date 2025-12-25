@@ -1,9 +1,12 @@
 import { Command, Flags, settings } from "@oclif/core";
 import { createApp } from "../server.js";
 import { serve } from "@hono/node-server";
-import { createPgClientFromEnv } from "../infra/postgres/client.js";
+import { Context } from "effect";
+import { RuntimeConfig, loadRuntimeConfigFromEnv } from "../infra/config.js";
+import { HistoryStore, makeHistoryStore } from "../infra/history.js";
+import { Client } from "pg";
 import { makePgQueryable } from "../infra/postgres/queryable.js";
-import { initRuntimeEnv } from "../infra/config.js";
+import { Queryable } from "../services/query.js";
 import open from "open";
 
 export default class Serve extends Command {
@@ -19,17 +22,33 @@ export default class Serve extends Command {
   };
 
   public async run(): Promise<void> {
-    // env は起動時に1回だけ読む（各モジュールで process.env を参照しない）
-    initRuntimeEnv(process.env);
-
     const { flags } = await this.parse(Serve);
 
-    const client = createPgClientFromEnv();
+    // env は起動時に1回だけ読む（各モジュールで process.env を参照しない）
+    const cfg = await loadRuntimeConfigFromEnv(process.env);
+
+    const client = new Client({
+      host: cfg.pg.host,
+      port: cfg.pg.port,
+      user: cfg.pg.user,
+      password: cfg.pg.password,
+      database: cfg.pg.database,
+    });
     await client.connect();
 
     const queryable = makePgQueryable(client);
+    const historyStore = makeHistoryStore(cfg);
 
-    const app = createApp({ queryable });
+    const context = Context.empty().pipe(
+      Context.add(RuntimeConfig, cfg),
+      Context.add(Queryable, queryable),
+      Context.add(HistoryStore, historyStore),
+    );
+
+    const app = createApp({
+      context,
+      isProduction: cfg.nodeEnv === "production",
+    });
     const server = serve({
       fetch: app.fetch,
       port: flags.port,

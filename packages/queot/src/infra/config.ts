@@ -1,6 +1,8 @@
 import os from "node:os";
 import path from "node:path";
-import fs from "node:fs";
+import fs from "node:fs/promises";
+import { Context, Effect, Layer, Schema } from "effect";
+import { Env } from "./env.js";
 
 export type QueotConfig = {
   historyPath?: string;
@@ -8,120 +10,171 @@ export type QueotConfig = {
   historyMaxBytes?: number;
 };
 
-type EnvSnapshot = Record<string, string | undefined>;
-let envSnapshot: EnvSnapshot | undefined;
+export type ResolvedHistoryConfig = Required<
+  Pick<QueotConfig, "historyPath" | "historyMaxEntries" | "historyMaxBytes">
+>;
+
+export type PgConfig = {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+};
+
+export type RuntimeConfigService = {
+  history: ResolvedHistoryConfig;
+  pg: PgConfig;
+  nodeEnv?: string;
+};
+
+export class RuntimeConfig extends Context.Tag("RuntimeConfig")<
+  RuntimeConfig,
+  RuntimeConfigService
+>() {}
+
+const NonNegativeInt = Schema.Number.pipe(Schema.int(), Schema.nonNegative());
+
+const QueotConfigFileSchema = Schema.Struct({
+  historyPath: Schema.optional(Schema.Trim.pipe(Schema.nonEmptyString())),
+  historyMaxEntries: Schema.optional(NonNegativeInt),
+  historyMaxBytes: Schema.optional(NonNegativeInt),
+});
 
 function clampInt(v: number, min: number, max: number): number {
   if (!Number.isFinite(v)) return min;
   return Math.max(min, Math.min(max, Math.trunc(v)));
 }
 
-/**
- * env は「起動時に1回だけ読む」前提。
- * ここに渡した値だけを以後参照する（各モジュールで process.env を参照しない）。
- */
-export function initRuntimeEnv(env: NodeJS.ProcessEnv): void {
-  envSnapshot = { ...env };
-  cached = undefined;
-}
-
-function getEnv(name: string): string | undefined {
-  return envSnapshot?.[name];
-}
-
-function getConfigHome(): string {
-  const xdg = getEnv("XDG_CONFIG_HOME")?.trim();
+function getConfigHome(env: Context.Tag.Service<typeof Env>): string {
+  const xdg = env.get("XDG_CONFIG_HOME")?.trim();
   if (xdg && xdg.length > 0) return xdg;
   return path.join(os.homedir(), ".config");
 }
 
-export function getQueotConfigPath(): string {
-  return path.join(getConfigHome(), "queot", "config.json");
+export function getQueotConfigPath(
+  env: Context.Tag.Service<typeof Env>,
+): string {
+  return path.join(getConfigHome(env), "queot", "config.json");
 }
 
-function toNonNegativeInt(v: unknown): number | undefined {
-  if (typeof v !== "number") return undefined;
-  if (!Number.isFinite(v)) return undefined;
-  const t = Math.trunc(v);
-  if (t < 0) return undefined;
-  return t;
+function loadQueotConfig(
+  env: Context.Tag.Service<typeof Env>,
+): Effect.Effect<QueotConfig, never> {
+  const p = getQueotConfigPath(env);
+  return Effect.tryPromise({
+    try: async () => {
+      const raw = await fs.readFile(p, "utf8");
+      const json = JSON.parse(raw) as unknown;
+      const decoded = Schema.decodeUnknownEither(QueotConfigFileSchema)(json);
+      if (decoded._tag === "Left") return {};
+      return decoded.right;
+    },
+    catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+  }).pipe(Effect.catchAll(() => Effect.succeed({})));
 }
 
-function toNonEmptyString(v: unknown): string | undefined {
-  if (typeof v !== "string") return undefined;
-  const s = v.trim();
-  return s.length > 0 ? s : undefined;
-}
-
-let cached: QueotConfig | undefined;
-
-/**
- * `$XDG_CONFIG_HOME/queot/config.json`（無ければ `$HOME/.config/queot/config.json`）を読む。
- * - 無い/壊れている場合は `{}` を返す
- * - 値は最低限の型チェックだけして取り込む
- */
-export function getQueotConfig(): QueotConfig {
-  if (cached) return cached;
-
-  const p = getQueotConfigPath();
+function parseEnvNonNegativeInt(
+  env: Context.Tag.Service<typeof Env>,
+  name: string,
+): number | undefined {
+  const raw = env.get(name);
+  if (!raw) return undefined;
   try {
-    const raw = fs.readFileSync(p, "utf8");
-    const json = JSON.parse(raw) as unknown;
-    if (!json || typeof json !== "object") {
-      cached = {};
-      return cached;
-    }
-    const obj = json as Record<string, unknown>;
-    cached = {
-      historyPath: toNonEmptyString(obj.historyPath),
-      historyMaxEntries: toNonNegativeInt(obj.historyMaxEntries),
-      historyMaxBytes: toNonNegativeInt(obj.historyMaxBytes),
-    };
-    return cached;
+    return Schema.decodeUnknownSync(
+      Schema.NumberFromString.pipe(Schema.int(), Schema.nonNegative()),
+    )(raw);
   } catch {
-    cached = {};
-    return cached;
+    return undefined;
   }
 }
 
-function parseEnvNonNegativeInt(name: string): number | undefined {
-  const raw = getEnv(name);
+function parseEnvNonEmptyString(
+  env: Context.Tag.Service<typeof Env>,
+  name: string,
+): string | undefined {
+  const raw = env.get(name);
   if (!raw) return undefined;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return undefined;
-  const t = Math.trunc(n);
-  if (t < 0) return undefined;
-  return t;
+  try {
+    return Schema.decodeUnknownSync(Schema.Trim.pipe(Schema.nonEmptyString()))(
+      raw,
+    );
+  } catch {
+    return undefined;
+  }
 }
 
-function parseEnvNonEmptyString(name: string): string | undefined {
-  const raw = getEnv(name);
-  if (!raw) return undefined;
-  const s = raw.trim();
-  return s.length > 0 ? s : undefined;
-}
-
-export function getResolvedHistoryConfig(): Required<
-  Pick<QueotConfig, "historyPath" | "historyMaxEntries" | "historyMaxBytes">
-> {
-  const cfg = getQueotConfig();
+function resolveHistoryConfig(
+  env: Context.Tag.Service<typeof Env>,
+  cfg: QueotConfig,
+): ResolvedHistoryConfig {
   const historyPath =
-    parseEnvNonEmptyString("QUEOT_HISTORY_PATH") ??
+    parseEnvNonEmptyString(env, "QUEOT_HISTORY_PATH") ??
     cfg.historyPath ??
-    path.join(getConfigHome(), "queot", "history.jsonl");
+    path.join(getConfigHome(env), "queot", "history.jsonl");
 
   const historyMaxEntriesRaw =
-    parseEnvNonNegativeInt("QUEOT_HISTORY_MAX_ENTRIES") ??
+    parseEnvNonNegativeInt(env, "QUEOT_HISTORY_MAX_ENTRIES") ??
     cfg.historyMaxEntries ??
     500;
   const historyMaxBytesRaw =
-    parseEnvNonNegativeInt("QUEOT_HISTORY_MAX_BYTES") ??
+    parseEnvNonNegativeInt(env, "QUEOT_HISTORY_MAX_BYTES") ??
     cfg.historyMaxBytes ??
     5 * 1024 * 1024;
 
   return {
-    historyPath: historyPath,
+    historyPath,
     historyMaxEntries: clampInt(historyMaxEntriesRaw, 1, 50_000),
     historyMaxBytes: clampInt(historyMaxBytesRaw, 1, 1024 * 1024 * 1024),
+  };
+}
+
+function resolvePgConfig(env: Context.Tag.Service<typeof Env>): PgConfig {
+  const host = env.get("PGHOST") ?? "localhost";
+  const port = (() => {
+    const raw = env.get("PGPORT");
+    if (!raw) return 5432;
+    try {
+      return Schema.decodeUnknownSync(
+        Schema.NumberFromString.pipe(Schema.int()),
+      )(raw);
+    } catch {
+      return 5432;
+    }
+  })();
+  const user = env.get("PGUSER") ?? "postgres";
+  const password = env.get("PGPASSWORD") ?? "example";
+  const database = env.get("PGDATABASE") ?? "postgres";
+  return { host, port, user, password, database };
+}
+
+export const RuntimeConfigLive = Layer.effect(
+  RuntimeConfig,
+  Effect.gen(function* () {
+    const env = yield* Env;
+    const cfg = yield* loadQueotConfig(env);
+    return {
+      history: resolveHistoryConfig(env, cfg),
+      pg: resolvePgConfig(env),
+      nodeEnv: env.get("NODE_ENV"),
+    };
+  }),
+);
+
+/**
+ * 起動時に1回だけ `process.env` を読む用途。
+ * - Effect/Layer を使わずに `RuntimeConfig` のサービス値だけ欲しいケース（CLI起動など）向け
+ */
+export async function loadRuntimeConfigFromEnv(
+  env: NodeJS.ProcessEnv,
+): Promise<RuntimeConfigService> {
+  const envSvc: Context.Tag.Service<typeof Env> = {
+    get: (name) => env[name],
+  };
+  const cfg = await Effect.runPromise(loadQueotConfig(envSvc));
+  return {
+    history: resolveHistoryConfig(envSvc, cfg),
+    pg: resolvePgConfig(envSvc),
+    nodeEnv: envSvc.get("NODE_ENV"),
   };
 }

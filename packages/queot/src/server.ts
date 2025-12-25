@@ -1,19 +1,21 @@
 import { Hono } from "hono";
 import { createApiRoute } from "./routes/api.js";
-import { Queryable } from "./services/query.js";
-import { type Context } from "effect";
+import type { Queryable } from "./services/query.js";
+import type { HistoryStore } from "./infra/history.js";
 import { serveStatic } from "@hono/node-server/serve-static";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { Context } from "effect";
 
 export function createApp(deps: {
-  queryable: Context.Tag.Service<typeof Queryable>;
+  context: Context.Context<Queryable | HistoryStore>;
+  isProduction?: boolean;
 }) {
   const app = new Hono();
 
   app.route("/api", createApiRoute(deps));
 
-  if (process.env.NODE_ENV === "production") {
+  if (deps.isProduction) {
     const clientDistDir = fileURLToPath(
       new URL("../dist/client", import.meta.url),
     );
