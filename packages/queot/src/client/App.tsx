@@ -249,9 +249,6 @@ export function App() {
       <header class="mb-4 flex items-start justify-between gap-4">
         <div>
           <h1 class="m-0 text-lg font-bold">queot — Query Console</h1>
-          <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            フォームでSQLを送信し、JSON API（/api/run）経由で結果を表示します。
-          </p>
         </div>
         <div class="flex items-center gap-2">
           <button
