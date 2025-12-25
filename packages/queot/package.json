@@ -17,7 +17,8 @@
     "check:eslint": "eslint",
     "fix": "pnpm \"/^fix:.+$/\"",
     "fix:prettier": "prettier . --write",
-    "fix:eslint": "eslint --fix"
+    "fix:eslint": "eslint --fix",
+    "test": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -47,7 +48,8 @@
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "catalog:",
-    "vite": "^7.3.0"
+    "vite": "^7.3.0",
+    "vitest": "^4.0.16"
   },
   "bin": {
     "queot": "./bin/run.js"

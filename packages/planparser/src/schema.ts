@@ -18,8 +18,7 @@ export const MinimalPlanNodeSchema = Schema.Struct({
 
 // PlanNode の判別（型安全な推論）を成立させるため、検証失敗ノードは
 // PlanNode["Node Type"] を固定値 "UnknownNode" にする（元のNode Typeは originalNodeType に保持する）。
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const UnknownNodeSchema = Schema.Struct({
+export const UnknownNodeSchema = Schema.Struct({
   "Node Type": Schema.Literal("UnknownNode"),
   originalNodeType: Schema.String,
   Plans: Schema.optional(Schema.Array(Schema.Unknown)),

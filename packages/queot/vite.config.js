@@ -21,4 +21,9 @@ export default {
     sourcemap: true,
   },
   plugins: [tailwindcss()],
+  test: {
+    root: "./src",
+    exclude: ["**/*.{js,jsx}"],
+    include: ["**/*.{test,spec}.{ts,tsx}"],
+  },
 };
