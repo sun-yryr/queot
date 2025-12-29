@@ -19,12 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
 
-      # npm trusted publishing requires npm v11 (らしい)
-      - name: Update npm to v11
-        run: npm install -g npm@11
-
       - name: Setup tools
         uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+
+      # npm trusted publishing requires npm v11 (らしい)
+      - name: Update npm to v11
+        run: npm install -g npm@^11.7.0
 
       - uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
         with:
