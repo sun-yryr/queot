@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "prepare": "husky",
-    "ci:publish": "pnpm -r publish"
+    "ci:publish": "pnpm -r publish --no-git-checks"
   },
   "keywords": [],
   "author": "",
