@@ -9,40 +9,56 @@ import { makePgQueryable } from "../infra/postgres/queryable.js";
 import { Queryable } from "../services/query.js";
 import open from "open";
 import { password } from "@inquirer/prompts";
+import type { AddressInfo } from "node:net";
+
+function getPortFromServerAddress(
+  addr: string | AddressInfo | null,
+): number | null {
+  if (!addr) return null;
+  if (typeof addr === "string") return null;
+  return addr.port;
+}
 
 export default class Serve extends Command {
   static override args = {};
-  static override description = "describe the command here";
-  static override examples = ["<%= config.bin %> <%= command.id %>"];
+  static override summary =
+    "PostgreSQL に接続し、queot のWeb UIサーバーを起動します。";
+  static override description = `パスワードは起動時にプロンプトから入力します。 DBPASSWORD 環境変数で渡すことも可能です。`;
+  static override examples = [
+    "$ <%= config.bin %> <%= command.id %>",
+    "$ <%= config.bin %> <%= command.id %> --db-name demo",
+    "$ DBPASSWORD=**** <%= config.bin %> <%= command.id %> --db-name demo",
+    "$ <%= config.bin %> <%= command.id %> --db-name demo --listen-port 3000",
+  ];
   static override flags = {
-    port: Flags.integer({
-      char: "p",
-      description: "port to listen on",
-      default: 3000,
-    }),
-    dbHost: Flags.string({
-      char: "h",
-      aliases: ["host"],
+    "db-host": Flags.string({
       description: "host to connect to Database",
+      char: "h",
       default: "localhost",
+      helpValue: "<hostname/IP address>",
     }),
-    dbPort: Flags.integer({
-      char: "P",
-      aliases: ["port"],
+    "db-port": Flags.integer({
+      char: "p",
       description: "port to connect to Database",
       default: 5432,
+      helpValue: "<port number>",
     }),
-    dbUser: Flags.string({
+    "db-username": Flags.string({
       char: "u",
-      aliases: ["user"],
       description: "user to connect to Database",
       default: "postgres",
+      helpValue: "<username>",
     }),
-    dbDatabase: Flags.string({
+    "db-name": Flags.string({
       char: "d",
-      aliases: ["database"],
       description: "database to connect to Database",
       default: "postgres",
+      helpValue: "<database name>",
+    }),
+    "listen-port": Flags.integer({
+      char: "l",
+      description: "port to listen on (default: auto select an available port)",
+      helpValue: "<port number>",
     }),
   };
 
@@ -51,6 +67,12 @@ export default class Serve extends Command {
 
     // env は起動時に1回だけ読む（各モジュールで process.env を参照しない）
     const cfg = await loadRuntimeConfigFromEnv(process.env);
+
+    const listenPort = flags["listen-port"];
+    const dbHost = flags["db-host"];
+    const dbPort = flags["db-port"];
+    const dbUser = flags["db-username"];
+    const dbDatabase = flags["db-name"];
 
     let dbPassword = process.env.DBPASSWORD;
     if (!dbPassword) {
@@ -61,11 +83,11 @@ export default class Serve extends Command {
     }
 
     const client = new Client({
-      host: flags.dbHost,
-      port: flags.dbPort,
-      user: flags.dbUser,
+      host: dbHost,
+      port: dbPort,
+      user: dbUser,
       password: dbPassword,
-      database: flags.dbDatabase,
+      database: dbDatabase,
     });
     await client.connect();
 
@@ -84,8 +106,10 @@ export default class Serve extends Command {
     });
     const server = serve({
       fetch: app.fetch,
-      port: flags.port,
+      port: listenPort ?? 0,
     });
+    const actualPort =
+      getPortFromServerAddress(server.address()) ?? listenPort ?? 0;
 
     process.on("SIGINT", () => {
       server.close();
@@ -96,10 +120,12 @@ export default class Serve extends Command {
       void client.end();
     });
 
-    this.log(`Server is running on port ${flags.port}\nPress Ctrl+C to exit`);
+    this.log(
+      `サーバーはポート ${actualPort} で起動しています\n終了するには Ctrl+C を押してください`,
+    );
 
     if (!settings.debug) {
-      await open(`http://localhost:${flags.port}`);
+      await open(`http://localhost:${actualPort}`);
     }
   }
 }

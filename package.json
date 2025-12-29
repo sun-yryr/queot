@@ -1,5 +1,6 @@
 {
   "name": "queot-monorepo",
+  "private": true,
   "version": "0.0.0",
   "description": "Query Optimization Tool for SQL",
   "type": "module",
@@ -8,7 +9,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "packageManager": "pnpm@10.25.0",
   "dependencies": {
   },

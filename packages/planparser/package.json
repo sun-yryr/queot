@@ -1,5 +1,6 @@
 {
   "name": "@sun-yryr/queot-planparser",
+  "private": true,
   "version": "0.0.0",
   "description": "Plan Parser for queot",
   "type": "module",
@@ -16,7 +17,7 @@
   ],
   "keywords": [],
   "author": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "packageManager": "pnpm@10.25.0",
   "scripts": {
     "build": "tsc",
