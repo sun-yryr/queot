@@ -102,7 +102,7 @@ export default class Serve extends Command {
 
     const app = createApp({
       context,
-      isProduction: cfg.nodeEnv === "production",
+      isProduction: cfg.nodeEnv !== "development",
     });
     const server = serve({
       fetch: app.fetch,

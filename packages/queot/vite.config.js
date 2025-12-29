@@ -1,7 +1,8 @@
 import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
 
 /** @type {import('vite').UserConfig} */
-export default {
+export default defineConfig(({ mode }) => ({
   root: "./src/client",
   esbuild: {
     jsxImportSource: "hono/jsx/dom",
@@ -18,7 +19,8 @@ export default {
     outDir: "../../dist/client",
     emptyOutDir: true,
     assetsDir: "assets",
-    sourcemap: true,
+    sourcemap:
+      process.env.GENERATE_SOURCEMAP === "true" ? true : mode !== "production",
   },
   plugins: [tailwindcss()],
   test: {
@@ -26,4 +28,4 @@ export default {
     exclude: ["**/*.{js,jsx}"],
     include: ["**/*.{test,spec}.{ts,tsx}"],
   },
-};
+}));
