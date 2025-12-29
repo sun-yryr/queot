@@ -5,15 +5,15 @@
   "description": "Query Optimization Tool for SQL",
   "type": "module",
   "scripts": {
-    "prepare": "husky"
+    "prepare": "husky",
+    "ci:publish": "pnpm -r publish"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "packageManager": "pnpm@10.25.0",
-  "dependencies": {
-  },
   "devDependencies": {
+    "@changesets/cli": "^2.29.8",
     "@eslint/js": "catalog:",
     "eslint": "catalog:",
     "eslint-config-prettier": "catalog:",

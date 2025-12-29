@@ -1,0 +1,47 @@
+name: Changesets
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  CI: true
+  PNPM_CACHE_PATH: ${{ github.workspace }}/.pnpm-store
+
+jobs:
+  version:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Setup tools
+        uses: jdx/mise-action@146a28175021df8ca24f8ee1828cc2a60f980bd5 # v3.5.1
+
+      - uses: actions/cache@9255dc7a253b0ccc959486e2bca901246202afeb # v5.0.1
+        with:
+          path: ${{ env.PNPM_CACHE_PATH }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install dependencies
+        run: |
+          pnpm config set store-dir ${{ env.PNPM_CACHE_PATH }}
+          pnpm install
+
+      - name: Build
+        run: pnpm -r build
+
+      - name: Create and publish versions
+        uses: changesets/action@e0145edc7d9d8679003495b11f87bd8ef63c0cba # v1.5.3
+        with:
+          commit: "chore: Release packages"
+          title: ":tada: Release packages"
+          publish: pnpm ci:publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
