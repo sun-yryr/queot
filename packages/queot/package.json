@@ -54,6 +54,15 @@
     "vite": "^7.3.0",
     "vitest": "^4.0.16"
   },
+  "files": [
+    "dist",
+    "bin/run.js",
+    "bin/run.cmd"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
   "bin": {
     "queot": "./bin/run.js"
   },
