@@ -3,5 +3,5 @@ import workspaceConfig from "../../eslint.config.mjs";
 
 export default defineConfig([
   ...workspaceConfig,
-  { ignores: ["vite.config.js"] },
+  { ignores: ["vite.config.js", "scripts/bundle-server.mjs"] },
 ]);
