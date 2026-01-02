@@ -1,6 +1,6 @@
 {
   "name": "@sun-yryr/queot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Query Optimization Tool for SQL",
   "main": "index.js",
   "type": "module",
