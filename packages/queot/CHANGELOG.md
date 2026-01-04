@@ -1,5 +1,11 @@
 # @sun-yryr/queot
 
+## 0.1.2
+
+### Patch Changes
+
+- 7c95678: chore: npmのページにREADMEを追加しました
+
 ## 0.1.1
 
 ### Patch Changes
