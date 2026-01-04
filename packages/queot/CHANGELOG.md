@@ -1,5 +1,11 @@
 # @sun-yryr/queot
 
+## 0.1.3
+
+### Patch Changes
+
+- 9ad9e7d: filesに親ディレクトリを指定してもダメだったのでコピーする
+
 ## 0.1.2
 
 ### Patch Changes
