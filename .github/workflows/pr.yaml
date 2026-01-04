@@ -29,6 +29,9 @@ jobs:
           pnpm config set store-dir ${{ env.PNPM_CACHE_PATH }}
           pnpm install
 
+      - name: Build dependencies packages
+        run: pnpm -F @sun-yryr/queot-planparser build
+
       - name: Check
         run: pnpm -r check
 
