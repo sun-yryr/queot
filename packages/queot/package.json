@@ -60,8 +60,7 @@
   "files": [
     "dist",
     "bin/run.js",
-    "bin/run.cmd",
-    "../../README.md"
+    "bin/run.cmd"
   ],
   "publishConfig": {
     "access": "public",
