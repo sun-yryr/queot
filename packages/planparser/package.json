@@ -30,7 +30,7 @@
     "fix:eslint": "eslint --fix"
   },
   "dependencies": {
-    "effect": "^3.19.12"
+    "effect": "^3.19.14"
   },
   "devDependencies": {
     "@eslint/js": "catalog:",
