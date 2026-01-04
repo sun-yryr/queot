@@ -1,5 +1,11 @@
 # @sun-yryr/queot
 
+## 0.1.4
+
+### Patch Changes
+
+- ea13ae2: package.jsonにリポジトリURLとauthorを追加
+
 ## 0.1.3
 
 ### Patch Changes
